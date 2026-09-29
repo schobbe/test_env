@@ -1,0 +1,259 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BF6 Player Stats</title>
+    <link rel="stylesheet" href="bf6.css">
+</head>
+<body class="bf6-page">
+    <!-- Top bar -->
+    <div class="bf-topbar">
+        <div class="bf-inner bf-topbar-row">
+            <a href="index.html" class="bf-brand">🪖 BF6 Stats <span class="bf-brand-sub">unofficial</span></a>
+            <nav class="bf-navlinks">
+                <a href="index.html">Home</a>
+                <a href="map.html">Interactive Map</a>
+                <a href="bf6.html" class="active">BF6 Stats</a>
+            </nav>
+        </div>
+    </div>
+
+    <div class="bf-inner">
+        <!-- Hero -->
+        <div class="bf-hero">
+            <h1>Battlefield 6 Player Statistics</h1>
+            <p>Look up any BF6 player by their exact in-game display name. Live data, no account or API key required.</p>
+        </div>
+
+        <!-- Search -->
+        <form class="bf-search" id="bfSearchForm" autocomplete="off">
+            <div class="bf-field grow">
+                <label for="bfNameInput">Player name (exact match)</label>
+                <input type="text" id="bfNameInput" name="name" placeholder="e.g. offroad89" required>
+            </div>
+            <div class="bf-field">
+                <label for="bfPlatformSelect">Platform</label>
+                <select id="bfPlatformSelect" name="platform"></select>
+            </div>
+            <div class="bf-field">
+                <button type="submit" class="bf-btn" id="bfSubmitBtn">Search</button>
+            </div>
+            <div class="bf-hint">
+                ℹ️ The API matches names exactly (no fuzzy search), and names are case-sensitive. If a lookup fails,
+                double-check the spelling and try another platform — the same player can exist on both <em>ea</em> and <em>steam</em>.
+            </div>
+        </form>
+
+        <!-- Recent searches -->
+        <div class="bf-recent" id="bfRecent" style="display:none;"></div>
+
+        <!-- Status / error area -->
+        <div id="bfStatus"></div>
+
+        <!-- Loading skeleton -->
+        <div class="bf-skeleton" id="bfSkeleton" style="display:none;"></div>
+
+        <!-- Results -->
+        <div id="bfResults" style="display:none;">
+
+            <!-- Identity -->
+            <div class="bf-identity" id="bfIdentity"></div>
+
+            <!-- Overview stat cards -->
+            <div class="bf-stat-grid" id="bfOverview"></div>
+
+            <!-- Career / objective totals -->
+            <div class="bf-panel">
+                <div class="bf-panel-head">
+                    <h2>📋 Career &amp; Objective Totals</h2>
+                    <span class="bf-count" id="bfCareerMode"></span>
+                </div>
+                <div class="bf-panel-body" id="bfCareer"></div>
+            </div>
+
+            <div class="bf-split">
+                <!-- Kill breakdown -->
+                <div class="bf-panel">
+                    <div class="bf-panel-head">
+                        <h2>🎯 Kill Breakdown</h2>
+                    </div>
+                    <div class="bf-panel-body" id="bfKillBreakdown"></div>
+                </div>
+
+                <!-- Damage / assists breakdown -->
+                <div class="bf-panel">
+                    <div class="bf-panel-head">
+                        <h2>💥 Damage &amp; Assist Breakdown</h2>
+                    </div>
+                    <div class="bf-panel-body" id="bfDamageBreakdown"></div>
+                </div>
+            </div>
+
+            <!-- Weapons -->
+            <div class="bf-panel">
+                <div class="bf-panel-head">
+                    <h2>🔫 Weapons</h2>
+                    <span class="bf-count">Click a column header to sort · <span id="bfWeaponCount"></span></span>
+                </div>
+                <div class="bf-panel-body flush">
+                    <div class="bf-table-wrap">
+                        <table class="bf-table" id="bfWeaponsTable">
+                            <thead>
+                                <tr id="bfWeaponsHead"></tr>
+                            </thead>
+                            <tbody id="bfWeaponsBody"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <div class="bf-split">
+                <!-- Weapon groups -->
+                <div class="bf-panel">
+                    <div class="bf-panel-head">
+                        <h2>🗂️ Weapon Groups</h2>
+                    </div>
+                    <div class="bf-panel-body" id="bfWeaponGroups"></div>
+                </div>
+
+                <!-- Classes -->
+                <div class="bf-panel">
+                    <div class="bf-panel-head">
+                        <h2>🎖️ Classes</h2>
+                    </div>
+                    <div class="bf-panel-body" id="bfClasses"></div>
+                </div>
+            </div>
+
+            <div class="bf-split">
+                <!-- Game modes -->
+                <div class="bf-panel">
+                    <div class="bf-panel-head">
+                        <h2>🕹️ Game Modes</h2>
+                    </div>
+                    <div class="bf-panel-body flush">
+                        <div class="bf-table-wrap">
+                            <table class="bf-table">
+                                <thead>
+                                    <tr id="bfGameModesHead"></tr>
+                                </thead>
+                                <tbody id="bfGameModesBody"></tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Maps -->
+                <div class="bf-panel">
+                    <div class="bf-panel-head">
+                        <h2>🗺️ Maps</h2>
+                    </div>
+                    <div class="bf-panel-body flush">
+                        <div class="bf-table-wrap">
+                            <table class="bf-table">
+                                <thead>
+                                    <tr id="bfMapsHead"></tr>
+                                </thead>
+                                <tbody id="bfMapsBody"></tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="bf-split">
+                <!-- Vehicles -->
+                <div class="bf-panel">
+                    <div class="bf-panel-head">
+                        <h2>🚁 Vehicles &amp; Archetypes</h2>
+                    </div>
+                    <div class="bf-panel-body flush">
+                        <div class="bf-table-wrap">
+                            <table class="bf-table" id="bfVehiclesTable">
+                                <thead>
+                                    <tr id="bfVehiclesHead"></tr>
+                                </thead>
+                                <tbody id="bfVehiclesBody"></tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Gadgets -->
+                <div class="bf-panel">
+                    <div class="bf-panel-head">
+                        <h2>🧰 Gadgets</h2>
+                    </div>
+                    <div class="bf-panel-body flush">
+                        <div class="bf-table-wrap">
+                            <table class="bf-table" id="bfGadgetsTable">
+                                <thead>
+                                    <tr id="bfGadgetsHead"></tr>
+                                </thead>
+                                <tbody id="bfGadgetsBody"></tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Melee -->
+            <div class="bf-panel">
+                <div class="bf-panel-head">
+                    <h2>🔪 Melee</h2>
+                </div>
+                <div class="bf-panel-body" id="bfMelee"></div>
+            </div>
+
+            <!-- Live activity chart -->
+            <div class="bf-panel">
+                <div class="bf-panel-head">
+                    <h2>📈 Live BF6 Activity</h2>
+                    <div class="bf-chart-head">
+                        <div class="bf-toggle-group" id="bfActivityRange">
+                            <button type="button" data-days="1">24 h</button>
+                            <button type="button" data-days="7" class="active">7 d</button>
+                            <button type="button" data-days="30">30 d</button>
+                        </div>
+                    </div>
+                </div>
+                <div class="bf-chart-box">
+                    <svg class="bf-chart-svg" id="bfActivitySvg" preserveAspectRatio="none"></svg>
+                </div>
+                <div class="bf-chart-legend" id="bfActivityLegend"></div>
+            </div>
+
+            <!-- Live server browser -->
+            <div class="bf-panel">
+                <div class="bf-panel-head">
+                    <h2>🖥️ Live Portal Servers</h2>
+                    <div class="bf-filters" id="bfServerFilters"></div>
+                </div>
+                <div class="bf-panel-body">
+                    <div class="bf-server-list" id="bfServerList">
+                        <div class="bf-muted">Loading servers…</div>
+                    </div>
+                </div>
+            </div>
+
+        </div><!-- /#bfResults -->
+    </div><!-- /.bf-inner -->
+
+    <div class="bf-footer">
+        <div class="bf-inner">
+            <p>
+                Unofficial fan project. Statistics via the community-run
+                <a href="https://api.gametools.network/docs" target="_blank" rel="noopener">gametools.network</a> API
+                (data © EA / DICE). Not affiliated with or endorsed by EA or DICE.
+            </p>
+            <p>
+                No game artwork, icons or avatars are used on this page — all visuals are CSS-drawn and generated locally.
+            </p>
+        </div>
+    </div>
+
+    <script src="bf6.js"></script>
+</body>
+</html>
+
