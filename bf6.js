@@ -32,6 +32,9 @@ const LABEL_SOURCE = 'name';
 const RECENT_KEY = 'bf6.recent.v1';
 const RECENT_MAX = 6;
 
+const SAVED_KEY = 'bf6.saved.v1';
+const SAVED_MAX = 12;
+
 /* Shown on first load so the page is never empty. */
 const DEFAULT_PLAYER = { name: 'offroad89', platform: 'steam' };
 
@@ -2059,6 +2062,111 @@ function renderRecent() {
     });
 }
 
+/* --------------------------- SAVED SHORTCUTS --------------------------- */
+
+function readSaved() {
+    try {
+        const raw = localStorage.getItem(SAVED_KEY);
+        const arr = raw ? JSON.parse(raw) : [];
+        return Array.isArray(arr) ? arr.filter((s) => s && s.name) : [];
+    } catch (e) {
+        return [];
+    }
+}
+
+/* The API is case-sensitive, but saving "Offroad89" and "offroad89" as two
+   separate shortcuts is user error worth absorbing. Store the typed casing. */
+function savedIndex(name, platform) {
+    return String(platform || '') + '|' + String(name || '').toLowerCase();
+}
+
+function isSaved(name, platform) {
+    const key = savedIndex(name, platform);
+    return readSaved().some((s) => savedIndex(s.name, s.platform) === key);
+}
+
+function writeSaved(list) {
+    try {
+        localStorage.setItem(SAVED_KEY, JSON.stringify(list.slice(0, SAVED_MAX)));
+    } catch (e) { /* ignore: shortcuts are a nice-to-have, never required */ }
+}
+
+function toggleSaved(name, platform) {
+    const key = savedIndex(name, platform);
+    const list = readSaved();
+    const at = list.findIndex((s) => savedIndex(s.name, s.platform) === key);
+
+    if (at === -1) list.unshift({ name: name, platform: platform });
+    else list.splice(at, 1);
+
+    writeSaved(list);
+    renderSaved();
+}
+
+function removeSaved(name, platform) {
+    const key = savedIndex(name, platform);
+    writeSaved(readSaved().filter((s) => savedIndex(s.name, s.platform) !== key));
+    renderSaved();
+}
+
+function syncSaveButton() {
+    const btn = $('bfSaveBtn');
+    if (!btn) return;
+    const input = $('bfNameInput');
+    const sel = $('bfPlatformSelect');
+    const name = input ? input.value.trim() : '';
+    const saved = name ? isSaved(name, sel ? sel.value : '') : false;
+
+    btn.textContent = saved ? '★ Saved' : 'Save';
+    btn.classList.toggle('active', saved);
+    btn.setAttribute('aria-pressed', saved ? 'true' : 'false');
+}
+
+function loadShortcut(name, platform) {
+    const input = $('bfNameInput');
+    const sel = $('bfPlatformSelect');
+    if (input) input.value = name;
+    if (sel) sel.value = platform;
+    syncSaveButton();
+    loadPlayer(name, platform);
+}
+
+function renderSaved() {
+    const wrap = $('bfSaved');
+    if (!wrap) return;
+    const list = readSaved();
+    clear(wrap);
+
+    if (!list.length) {
+        wrap.style.display = 'none';
+        return;
+    }
+    wrap.style.display = 'flex';
+    wrap.appendChild(el('span', { class: 'bf-recent-label', text: 'Saved:' }));
+
+    list.forEach((s) => {
+        const holder = el('span', { class: 'bf-chip-wrap' });
+
+        const open = el('button', { type: 'button', class: 'bf-chip-main', text: s.name + ' (' + s.platform + ')' });
+        open.addEventListener('click', () => loadShortcut(s.name, s.platform));
+
+        const drop = el('button', {
+            type: 'button',
+            class: 'bf-chip-x',
+            title: 'Remove ' + s.name + ' from shortcuts',
+            text: '×'
+        });
+        drop.addEventListener('click', () => {
+            removeSaved(s.name, s.platform);
+            syncSaveButton();
+        });
+
+        holder.appendChild(open);
+        holder.appendChild(drop);
+        wrap.appendChild(holder);
+    });
+}
+
 /* ------------------------------ CONTROLLER ----------------------------- */
 
 const appState = {
@@ -2139,6 +2247,7 @@ async function loadPlayer(name, platform) {
         appState.hasLoaded = true;
 
         renderIdentity(stats, appState.lastQuery);
+        syncSaveButton();
         renderOverview(stats);
         renderCareer(stats);
         renderHighlights(profile);
@@ -2257,7 +2366,18 @@ function init() {
         loadPlayer(name, $('bfPlatformSelect').value);
     });
 
+    /* Shortcuts act on whatever is typed right now, so no lookup is required. */
+    $('bfSaveBtn').addEventListener('click', () => {
+        const name = $('bfNameInput').value.trim();
+        if (!name) return;
+        toggleSaved(name, $('bfPlatformSelect').value);
+        syncSaveButton();
+    });
+    $('bfNameInput').addEventListener('input', syncSaveButton);
+    $('bfPlatformSelect').addEventListener('change', syncSaveButton);
+
     renderRecent();
+    renderSaved();
 
     /* Player-independent live panels load alongside the first lookup. */
     loadSeason();
@@ -2266,6 +2386,7 @@ function init() {
     const query = readUrl() || DEFAULT_PLAYER;
     $('bfNameInput').value = query.name;
     ensurePlatformOption(query.platform);
+    syncSaveButton();
     loadPlayer(query.name, query.platform);
 }
 

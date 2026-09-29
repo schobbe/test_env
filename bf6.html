@@ -39,11 +39,17 @@
             <div class="bf-field">
                 <button type="submit" class="bf-btn" id="bfSubmitBtn">Search</button>
             </div>
+            <div class="bf-field">
+                <button type="button" class="bf-btn ghost" id="bfSaveBtn" aria-pressed="false">Save</button>
+            </div>
             <div class="bf-hint">
                 ℹ️ The API matches names exactly (no fuzzy search), and names are case-sensitive. If a lookup fails,
                 double-check the spelling and try another platform — the same player can exist on both <em>ea</em> and <em>steam</em>.
             </div>
         </form>
+
+        <!-- Saved shortcuts -->
+        <div class="bf-recent" id="bfSaved" style="display:none;"></div>
 
         <!-- Recent searches -->
         <div class="bf-recent" id="bfRecent" style="display:none;"></div>

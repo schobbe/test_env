@@ -35,6 +35,10 @@ A single-page dashboard for Battlefield 6 stats, built on the community-run
   be reconstructed, so the panel says so up front.
 * **Session History** — best-effort round-by-round table from
   `/manager/sessions/`, shown only when the endpoint actually returns rows.
+* **Saved shortcuts** — the Save button next to the search stores the typed
+  name/platform (up to 12) without needing a successful lookup. They render as
+  a chip row above Recent: click one to jump back, `×` to forget. Stored in
+  `localStorage`, so like the trend data they are browser-local.
 * Shareable URLs, e.g. `bf6.html?name=offroad89&platform=steam`.
 * **No game artwork is used.** All visuals are CSS-drawn or inline SVG, and no
   images are requested from any asset CDN. Statistics are © EA / DICE.

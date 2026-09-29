@@ -199,6 +199,17 @@ body.bf6-page {
     background: #22304a;
 }
 
+/* Saved-shortcut toggle: clearly distinct from the plain Save state. */
+.bf-btn.ghost.active {
+    background: rgba(129, 140, 248, 0.16);
+    border-color: var(--bf-accent);
+    color: var(--bf-accent);
+}
+
+.bf-btn.ghost.active:hover {
+    background: rgba(129, 140, 248, 0.26);
+}
+
 .bf-hint {
     flex-basis: 100%;
     color: var(--bf-muted);
@@ -778,6 +789,31 @@ body.bf6-page {
 .bf-recent button:hover {
     border-color: var(--bf-accent);
     color: #fff;
+}
+
+/* Saved shortcut = a load button fused to its remove button (nested
+   <button> elements would be invalid HTML, hence the wrapper). */
+.bf-recent .bf-chip-wrap {
+    display: inline-flex;
+    align-items: stretch;
+}
+
+.bf-recent .bf-chip-main {
+    border-radius: 20px 0 0 20px;
+    border-right: none;
+}
+
+.bf-recent .bf-chip-x {
+    border-radius: 0 20px 20px 0;
+    padding: 4px 10px;
+    font-size: 1em;
+    line-height: 1.3;
+    color: var(--bf-muted);
+}
+
+.bf-recent .bf-chip-x:hover {
+    color: #fff;
+    border-color: #f87171;
 }
 
 /* ---------- Highlights, badges & snapshot controls ---------- */
