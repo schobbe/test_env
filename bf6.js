@@ -176,11 +176,17 @@ function cacheSet(key, value) {
 }
 
 let lastRequestAt = 0;
+let throttleChain = Promise.resolve();
 
-async function throttle() {
-    const wait = THROTTLE_MS - (Date.now() - lastRequestAt);
-    if (wait > 0) await sleep(wait);
-    lastRequestAt = Date.now();
+/* Serialised so concurrent apiGet calls queue up instead of all reading the
+   same "last request" timestamp and firing together. */
+function throttle() {
+    throttleChain = throttleChain.then(async () => {
+        const wait = THROTTLE_MS - (Date.now() - lastRequestAt);
+        if (wait > 0) await sleep(wait);
+        lastRequestAt = Date.now();
+    });
+    return throttleChain;
 }
 
 /* ------------------------------- API LAYER ----------------------------- */
@@ -388,6 +394,8 @@ function normaliseStats(raw) {
         distance: (d.distanceTraveled && typeof d.distanceTraveled === 'object') ? d.distanceTraveled : null,
         dividedTime: (d.dividedSecondsPlayed && typeof d.dividedSecondsPlayed === 'object') ? d.dividedSecondsPlayed : null,
         bestClass: d.bestClass || null,
+        perGamemode: (d.perGamemode && typeof d.perGamemode === 'object') ? d.perGamemode : null,
+        perSeason: (d.perSeason && typeof d.perSeason === 'object') ? d.perSeason : null,
         weapons: stripAggregate(d.weapons),
         weaponGroups: stripAggregate(d.weaponGroups),
         vehicles: stripAggregate(d.vehicles),
@@ -695,10 +703,6 @@ function collectBreakdown(src, map) {
         value: numOf(src, pair[0]),
         formatted: fmtInt(numOf(src, pair[0]))
     }));
-}
-
-function renderKillBreakdown(stats) {
-    renderBarPanel($('bfKillBreakdown'), collectBreakdown(stats.dividedKills, KILL_LABELS));
 }
 
 function renderDamageBreakdown(stats) {
@@ -1086,69 +1090,896 @@ function renderActivityChart(payload) {
     }));
 }
 
-/* --------------------------- SERVER BROWSER ---------------------------- */
+/* --------------------------- PROFILE (/bf6/profile/) -------------------- */
 
-function renderServerFilters(regions) {
-    const wrap = $('bfServerFilters');
-    clear(wrap);
-    regions.forEach((region) => {
-        const chip = el('button', {
-            type: 'button',
-            class: 'bf-filter-chip' + (appState.serverRegion === region ? ' active' : ''),
-            text: region === 'all' ? 'All regions' : region
-        });
-        chip.addEventListener('click', () => {
-            appState.serverRegion = region;
-            renderServerFilters(regions);
-            renderServerList();
-        });
-        wrap.appendChild(chip);
-    });
+const MODE_TIME_LABELS = {
+    bt: 'Breakthrough',
+    cq: 'Conquest',
+    esc: 'Escalation',
+    rush: 'Rush',
+    dom: 'Domination',
+    koth: 'King of the Hill'
+};
+
+const CLASS_TIME_LABELS = {
+    assault: 'Assault',
+    support: 'Support',
+    engineer: 'Engineer',
+    recon: 'Recon'
+};
+
+const WEAPON_CLASS_KILL_LABELS = {
+    ar: 'Assault rifles',
+    mg: 'Machine guns',
+    crb: 'Carbines',
+    smg: 'SMGs',
+    dmr: 'DMR',
+    pst: 'Pistols',
+    snr: 'Sniper rifles',
+    snp: 'Sniper rifles',
+    shtgn: 'Shotguns',
+    shot: 'Shotguns',
+    lch: 'Launchers',
+    thrw: 'Throwables'
+};
+
+function titleToken(tok) {
+    if (!tok) return '';
+    if (tok.length <= 3) return tok.toUpperCase();
+    return tok.charAt(0).toUpperCase() + tok.slice(1);
 }
 
-function renderServerList() {
-    const list = $('bfServerList');
-    clear(list);
+function humanise(suffix) {
+    return String(suffix || '').split(/[_\s]+/).filter(Boolean).map(titleToken).join(' ');
+}
 
-    const all = appState.servers;
-    const filtered = appState.serverRegion === 'all'
-        ? all
-        : all.filter((s) => String(s.region || '') === appState.serverRegion);
+/* The profile stats array holds ~339 entries with duplicated names and many
+   nulls. Keep the first non-null value seen for each name. */
+function collectProfileStats(list) {
+    const map = Object.create(null);
+    (Array.isArray(list) ? list : []).forEach((s) => {
+        if (!s || !s.name) return;
+        if (map[s.name] === undefined && s.value !== null && s.value !== undefined) {
+            map[s.name] = s.value;
+        }
+    });
+    return map;
+}
 
-    if (!filtered.length) {
-        list.appendChild(el('div', { class: 'bf-muted', text: 'No portal servers found for this region right now.' }));
+function statOr(map, key) {
+    return map[key] === undefined ? null : toNum(map[key]);
+}
+
+function prefixedList(map, prefix, labelMap) {
+    const out = [];
+    Object.keys(map).forEach((k) => {
+        if (k.indexOf(prefix) !== 0) return;
+        const rest = k.slice(prefix.length);
+        if (!rest) return;
+        const v = toNum(map[k]);
+        if (!isFinite(v)) return;
+        out.push({ label: (labelMap && labelMap[rest]) || humanise(rest), value: v });
+    });
+    return out;
+}
+
+function collectWeaponClassKills(map) {
+    const out = [];
+    Object.keys(map).forEach((k) => {
+        const m = /^kills_(.+)_total$/.exec(k);
+        if (!m) return;
+        const v = toNum(map[k]);
+        if (!isFinite(v)) return;
+        out.push({ label: WEAPON_CLASS_KILL_LABELS[m[1]] || humanise(m[1]), value: v });
+    });
+    return out;
+}
+
+function normaliseProfile(raw) {
+    const list = raw && Array.isArray(raw.playerProfiles) ? raw.playerProfiles : [];
+    if (!list.length || !list[0]) return null;
+    const prof = list[0];
+    const map = collectProfileStats(prof.stats);
+
+    const card = (prof.playerCard && typeof prof.playerCard === 'object') ? prof.playerCard : {};
+    const dogTags = (prof.totalDogTags && typeof prof.totalDogTags === 'object') ? prof.totalDogTags : {};
+    const badgeSummary = (prof.badgeSummary && typeof prof.badgeSummary === 'object') ? prof.badgeSummary : {};
+
+    return {
+        rankName: typeof prof.rankName === 'string' ? prof.rankName : null,
+        rankLevel: card.rank === undefined || card.rank === null ? null : toNum(card.rank),
+        cardBadges: card.badges === undefined || card.badges === null ? null : toNum(card.badges),
+        dogTags: dogTags.intValue === undefined || dogTags.intValue === null ? null : toNum(dogTags.intValue),
+        badgeTotal: badgeSummary.totalBadges === undefined || badgeSummary.totalBadges === null
+            ? null : toNum(badgeSummary.totalBadges),
+        badges: Array.isArray(badgeSummary.badges) ? badgeSummary.badges : [],
+        competitive: (Array.isArray(prof.competitiveRanks) ? prof.competitiveRanks : [])
+            .map((r) => ({
+                mode: (r && (r.modeName || r.mode)) || 'Ranked',
+                rank: (r && r.rankName) || 'Unranked'
+            }))
+            .filter((r) => r.mode),
+        bestKillstreak: statOr(map, 'killstreak_longest_Total'),
+        longestKill: statOr(map, 'kill_longDist_last_cb'),
+        matches: statOr(map, 'matches_level'),
+        wins: statOr(map, 'wins_level'),
+        losses: statOr(map, 'losses_level'),
+        vehicleSeconds: statOr(map, 'tp_veh'),
+        kitTime: prefixedList(map, 'tp_kit_', CLASS_TIME_LABELS),
+        modeTime: prefixedList(map, 'tp_gm_', MODE_TIME_LABELS),
+        weaponKills: collectWeaponClassKills(map)
+    };
+}
+
+/* ------------------------------ HIGHLIGHTS ----------------------------- */
+
+function renderHighlights(profile) {
+    const node = $('bfHighlights');
+    const src = $('bfHighlightsSource');
+    clear(node);
+
+    if (!profile) {
+        if (src) src.textContent = '';
+        node.appendChild(el('div', {
+            class: 'bf-muted',
+            text: 'Profile details are unavailable for this player — the /bf6/profile/ endpoint returned no records.'
+        }));
         return;
     }
 
-    const ordered = filtered.slice().sort((a, b) => toNum(b.playerAmount) - toNum(a.playerAmount));
+    if (src) src.textContent = 'source: /bf6/profile/';
 
-    ordered.slice(0, 40).forEach((s) => {
-        const players = toNum(s.playerAmount);
-        const max = Math.max(1, toNum(s.maxPlayers));
-        const fill = Math.max(0, Math.min(100, (players / max) * 100));
+    const cards = [];
+    if (profile.rankName) cards.push(['Current rank', profile.rankName]);
+    if (profile.rankLevel !== null) cards.push(['Rank level', fmtInt(profile.rankLevel)]);
+    if (profile.matches !== null) cards.push(['Matches played', fmtInt(profile.matches)]);
+    if (profile.bestKillstreak !== null) cards.push(['Best killstreak', fmtInt(profile.bestKillstreak)]);
+    if (profile.longestKill !== null) cards.push(['Longest kill distance', fmtInt(profile.longestKill)]);
+    if (profile.dogTags !== null) cards.push(['Dog tags collected', fmtInt(profile.dogTags)]);
+    if (profile.badgeTotal !== null) cards.push(['Badges earned', fmtInt(profile.badgeTotal)]);
+    if (profile.cardBadges !== null) cards.push(['Card badges', fmtInt(profile.cardBadges)]);
+    if (profile.wins !== null && profile.losses !== null) {
+        cards.push(['Record (W / L)', fmtInt(profile.wins) + ' / ' + fmtInt(profile.losses)]);
+    }
+    if (profile.vehicleSeconds !== null && profile.vehicleSeconds > 0) {
+        cards.push(['Vehicle time', fmtDuration(profile.vehicleSeconds)]);
+    }
 
-        list.appendChild(el('div', { class: 'bf-server-card' }, [
-            el('div', { class: 'bf-server-name', text: s.prefix || 'Unnamed server' }),
-            el('div', { class: 'bf-server-meta' }, [
-                el('span', { text: s.region || 'unknown region' }),
-                el('span', { text: s.mode || 'mode n/a' }),
-                el('span', { text: s.currentMap || 'map n/a' }),
-                el('span', { text: (s.owner && s.owner.platform) ? s.owner.platform : 'platform n/a' })
-            ]),
-            el('div', { class: 'bf-server-players' }, [
-                el('div', { class: 'bf-bar-track', style: 'flex:1' }, [
-                    el('div', { class: 'bf-bar-fill', style: 'width:' + fill.toFixed(1) + '%' })
-                ]),
-                el('span', { class: 'bf-muted', text: players + '/' + max })
-            ])
+    if (cards.length) {
+        node.appendChild(el('div', { class: 'bf-stat-grid tight' },
+            cards.map((c) => kvCard(c[0], c[1]))));
+    }
+
+    if (profile.competitive.length) {
+        node.appendChild(el('div', { class: 'bf-bar-subhead', text: 'Ranked / competitive' }));
+        profile.competitive.forEach((r) => {
+            node.appendChild(el('div', { class: 'bf-comp-row' }, [
+                el('span', { class: 'bf-comp-mode', text: r.mode }),
+                el('span', { class: 'bf-comp-rank', text: r.rank })
+            ]));
+        });
+    }
+
+    if (profile.badges.length) {
+        node.appendChild(el('div', { class: 'bf-bar-subhead', text: 'Top badges' }));
+        const wrap = el('div', { class: 'bf-chip-row' });
+        profile.badges.slice(0, 8).forEach((b) => {
+            wrap.appendChild(el('span', {
+                class: 'bf-badge',
+                title: b.badgeId || '',
+                text: 'Tier ' + (toNum(b.tier) || 1) + ' · ' + toNum(b.progress) + '%'
+            }));
+        });
+        node.appendChild(wrap);
+    }
+
+    if (!cards.length && !profile.competitive.length && !profile.badges.length) {
+        node.appendChild(el('div', { class: 'bf-muted', text: 'No highlight data recorded for this player yet.' }));
+    }
+}
+
+/* ------------------------ SHARE / DISTRIBUTION BARS -------------------- */
+
+function renderSharePanel(node, entries, fmt) {
+    clear(node);
+    const live = (entries || []).filter((e) => e && toNum(e.value) > 0);
+    if (!live.length) {
+        node.appendChild(el('div', { class: 'bf-muted', text: 'No data recorded for this player yet.' }));
+        return;
+    }
+    live.sort((a, b) => toNum(b.value) - toNum(a.value));
+    const total = live.reduce((s, e) => s + toNum(e.value), 0);
+    const max = live.reduce((m, e) => Math.max(m, toNum(e.value)), 0);
+    live.forEach((e) => {
+        const share = total > 0 ? ((toNum(e.value) / total) * 100).toFixed(1) : '0.0';
+        node.appendChild(barRow(e.label, e.value, max,
+            (fmt ? fmt(e.value) : fmtInt(e.value)) + ' · ' + share + '%'));
+    });
+}
+
+function renderClassTime(profile) {
+    renderSharePanel($('bfClassTime'), profile ? profile.kitTime : [], fmtDuration);
+}
+
+function renderModeTime(profile) {
+    const entries = profile ? profile.modeTime.slice() : [];
+    if (profile && profile.vehicleSeconds > 0) {
+        entries.push({ label: 'Vehicles', value: profile.vehicleSeconds });
+    }
+    renderSharePanel($('bfModeTime'), entries, fmtDuration);
+}
+
+function renderWeaponClassKills(profile) {
+    renderSharePanel($('bfWeaponClassKills'), profile ? profile.weaponKills : [], fmtInt);
+}
+
+/* --------------------------- MODE COMPARISON --------------------------- */
+
+function collectModes(perGamemode) {
+    if (!perGamemode || typeof perGamemode !== 'object') return [];
+    return Object.keys(perGamemode).map((key) => {
+        const m = perGamemode[key];
+        if (!m || typeof m !== 'object') return null;
+        return {
+            label: m.gamemodeName || humanise(String(key).replace(/\d+$/, '')),
+            kd: toNum(m.killDeath),
+            winPercent: toNum(m.winPercent),
+            accuracy: toNum(m.accuracy),
+            kills: toNum(m.kills),
+            matches: toNum(m.matchesPlayed)
+        };
+    }).filter((m) => m && (m.matches > 0 || m.kills > 0));
+}
+
+function renderModeCompare(stats) {
+    const node = $('bfModeCompare');
+    clear(node);
+    const modes = collectModes(stats.perGamemode);
+    const count = $('bfModeCompareCount');
+    if (count) count.textContent = modes.length ? modes.length + ' modes' : '';
+
+    if (!modes.length) {
+        node.appendChild(el('div', { class: 'bf-muted', text: 'No per-mode breakdown available for this player.' }));
+        return;
+    }
+
+    const maxKd = Math.max(1, modes.reduce((m, x) => Math.max(m, x.kd), 0));
+
+    modes.forEach((m) => {
+        node.appendChild(el('div', { class: 'bf-bar-subhead' }, [
+            el('span', { text: m.label }),
+            el('span', { class: 'bf-muted', text: fmtInt(m.matches) + ' matches · ' + fmtInt(m.kills) + ' kills' })
         ]));
+        node.appendChild(barRow('K/D', m.kd, maxKd, fmtNum(m.kd)));
+        node.appendChild(barRow('Win rate', m.winPercent, 100, fmtPct(m.winPercent), 'good'));
+        node.appendChild(barRow('Accuracy', m.accuracy, 100, fmtPct(m.accuracy), 'warm'));
+    });
+}
+
+/* ------------------------------ DIAGRAMS ------------------------------- */
+
+const CHART_COLORS = ['#818cf8', '#38bdf8', '#f59e0b', '#34d399', '#f472b6', '#a78bfa',
+    '#fbbf24', '#60a5fa', '#f87171', '#4ade80', '#c084fc', '#2dd4bf'];
+
+/* 3356382 -> "3.4M", 48210 -> "48k" — keeps donut centre text inside the ring. */
+function fmtCompact(v) {
+    const n = toNum(v);
+    const a = Math.abs(n);
+    if (a >= 1e6) return (n / 1e6).toFixed(1).replace(/\.0$/, '') + 'M';
+    if (a >= 1e4) return (n / 1e3).toFixed(1).replace(/\.0$/, '') + 'k';
+    return fmtInt(n);
+}
+
+function svgText(x, y, text, cls, anchor) {
+    const t = svgEl('text', { x: x, y: y, 'text-anchor': anchor || 'middle' });
+    if (cls) t.setAttribute('class', cls);
+    t.textContent = text;
+    return t;
+}
+
+function svgTitle(node, text) {
+    const t = svgEl('title');
+    t.textContent = text;
+    node.appendChild(t);
+    return node;
+}
+
+/* Donut built from stroked circles + stroke-dasharray, which handles the
+   100%-single-slice case gracefully (a plain arc path cannot). */
+function renderDonut(svg, legendNode, rawSlices, centreValue, centreLabel) {
+    clear(svg);
+    clear(legendNode);
+
+    const live = (rawSlices || [])
+        .filter((s) => s && toNum(s.value) > 0)
+        .sort((a, b) => toNum(b.value) - toNum(a.value));
+    const total = live.reduce((s, x) => s + toNum(x.value), 0);
+
+    if (!total) {
+        legendNode.appendChild(el('div', { class: 'bf-muted', text: 'No data recorded for this player yet.' }));
+        return;
+    }
+
+    svg.setAttribute('viewBox', '0 0 240 240');
+    const cx = 120, cy = 120, r = 84, stroke = 34;
+    const circumference = 2 * Math.PI * r;
+
+    svg.appendChild(svgEl('circle', {
+        cx: cx, cy: cy, r: r, fill: 'none', stroke: '#1b222d', 'stroke-width': stroke
+    }));
+
+    let acc = 0;
+    live.forEach((s, i) => {
+        const length = (toNum(s.value) / total) * circumference;
+        svg.appendChild(svgEl('circle', {
+            cx: cx, cy: cy, r: r,
+            fill: 'none',
+            stroke: s.color || CHART_COLORS[i % CHART_COLORS.length],
+            'stroke-width': stroke,
+            'stroke-dasharray': length.toFixed(3) + ' ' + (circumference - length).toFixed(3),
+            'stroke-dashoffset': (-acc).toFixed(3),
+            transform: 'rotate(-90 ' + cx + ' ' + cy + ')'
+        }));
+        acc += length;
     });
 
-    if (ordered.length > 40) {
-        list.appendChild(el('div', {
-            class: 'bf-muted',
-            text: 'Showing the 40 busiest of ' + ordered.length + ' servers in this region.'
+    svg.appendChild(svgText(120, 114, centreValue, 'bf-donut-value'));
+    svg.appendChild(svgText(120, 136, centreLabel, 'bf-donut-label'));
+
+    live.forEach((s, i) => {
+        const color = s.color || CHART_COLORS[i % CHART_COLORS.length];
+        legendNode.appendChild(el('div', { class: 'bf-legend-item' }, [
+            el('span', { class: 'bf-legend-swatch', style: 'background:' + color }),
+            el('span', { class: 'bf-legend-name', text: s.label }),
+            el('span', { class: 'bf-legend-val', text: ((toNum(s.value) / total) * 100).toFixed(1) + '%' })
+        ]));
+    });
+}
+
+function renderXpDonut(stats) {
+    const xp = stats.xp;
+    if (!xp || !xp.total) {
+        renderDonut($('bfXpDonutSvg'), $('bfXpDonutLegend'), [], '', '');
+        return;
+    }
+    const performance = Math.max(0, toNum(xp.performance));
+    const accolades = Math.max(0, toNum(xp.accolades));
+    const other = Math.max(0, toNum(xp.total) - performance - accolades);
+
+    renderDonut(
+        $('bfXpDonutSvg'), $('bfXpDonutLegend'),
+        [
+            { label: 'Performance', value: performance, color: CHART_COLORS[0] },
+            { label: 'Accolades', value: accolades, color: CHART_COLORS[2] },
+            { label: 'Match & squad XP', value: other, color: CHART_COLORS[1] }
+        ],
+        fmtCompact(toNum(xp.total)),
+        'total XP'
+    );
+}
+
+function renderKillTypeDonut(stats) {
+    const slices = KILL_LABELS.map((pair, i) => ({
+        label: pair[1],
+        value: numOf(stats.dividedKills, pair[0]),
+        color: CHART_COLORS[i % CHART_COLORS.length]
+    }));
+    renderDonut(
+        $('bfKillDonutSvg'), $('bfKillDonutLegend'), slices,
+        fmtInt(stats.core.kills),
+        'kills'
+    );
+}
+
+/* ----------------------------- RADAR CHART ----------------------------- */
+
+function clampScore(v, lo, hi) {
+    const n = toNum(v);
+    if (!isFinite(n)) return 0;
+    if (hi === lo) return 0;
+    return Math.max(0, Math.min(100, ((n - lo) / (hi - lo)) * 100));
+}
+
+/* Each axis gets its own realistic range so a 25% accuracy does not read as
+   a 25% radar score against a 0-100 axis. Ranges are display heuristics. */
+function radarAxes(stats) {
+    const c = stats.core;
+    const matches = Math.max(1, c.matchesPlayed);
+    const objective = stats.objective || {};
+    const objectiveSeconds = objective.time ? toNum(objective.time.total) : 0;
+
+    return [
+        { label: 'K/D', value: clampScore(c.killDeath, 0, 3), raw: fmtNum(c.killDeath) },
+        { label: 'Kills/min', value: clampScore(c.killsPerMinute, 0, 4), raw: fmtNum(c.killsPerMinute) },
+        { label: 'Damage/min', value: clampScore(c.damagePerMinute, 0, 800), raw: fmtInt(c.damagePerMinute) },
+        { label: 'Accuracy', value: clampScore(c.accuracy, 0, 50), raw: fmtPct(c.accuracy) },
+        { label: 'HS rate', value: clampScore(c.headshotPercent, 0, 70), raw: fmtPct(c.headshotPercent) },
+        { label: 'Win rate', value: clampScore(c.winPercent, 0, 100), raw: fmtPct(c.winPercent) },
+        { label: 'Revives/match', value: clampScore(c.revives / matches, 0, 3), raw: fmtNum(c.revives / matches) },
+        { label: 'Obj time/match', value: clampScore(objectiveSeconds / matches, 0, 600), raw: fmtDuration(objectiveSeconds / matches) }
+    ];
+}
+
+function renderRadar(stats) {
+    const svg = $('bfRadarSvg');
+    const legend = $('bfRadarLegend');
+    clear(svg);
+    clear(legend);
+
+    const axes = radarAxes(stats);
+    if (axes.length < 3) {
+        legend.appendChild(el('div', { class: 'bf-muted', text: 'Not enough data to draw a profile.' }));
+        return;
+    }
+
+    svg.setAttribute('viewBox', '0 0 320 260');
+    const cx = 160, cy = 128, r = 84, n = axes.length;
+
+    const ringPoints = (f) => {
+        const pts = [];
+        for (let i = 0; i < n; i++) {
+            const ang = (i / n) * 2 * Math.PI - Math.PI / 2;
+            pts.push((cx + r * f * Math.cos(ang)).toFixed(2) + ',' + (cy + r * f * Math.sin(ang)).toFixed(2));
+        }
+        return pts.join(' ');
+    };
+
+    [0.25, 0.5, 0.75, 1].forEach((f) => {
+        svg.appendChild(svgEl('polygon', {
+            points: ringPoints(f),
+            fill: 'none',
+            stroke: '#283548',
+            'stroke-width': 1,
+            opacity: f === 1 ? 0.95 : 0.45,
+            'vector-effect': 'non-scaling-stroke'
         }));
+    });
+
+    axes.forEach((a, i) => {
+        const ang = (i / n) * 2 * Math.PI - Math.PI / 2;
+        const px = cx + r * Math.cos(ang);
+        const py = cy + r * Math.sin(ang);
+        svg.appendChild(svgEl('line', {
+            x1: cx, y1: cy, x2: px.toFixed(2), y2: py.toFixed(2),
+            stroke: '#283548', 'stroke-width': 1, opacity: 0.7,
+            'vector-effect': 'non-scaling-stroke'
+        }));
+
+        const lx = cx + (r + 24) * Math.cos(ang);
+        const ly = cy + (r + 24) * Math.sin(ang);
+        const cos = Math.cos(ang);
+        const anchor = Math.abs(cos) < 0.35 ? 'middle' : (cos > 0 ? 'start' : 'end');
+        svg.appendChild(svgText(lx.toFixed(2), (ly + 3).toFixed(2), a.label, 'bf-axis-label', anchor));
+    });
+
+    const points = axes.map((a, i) => {
+        const ang = (i / n) * 2 * Math.PI - Math.PI / 2;
+        const rr = (r * Math.max(0, Math.min(100, a.value))) / 100;
+        return { x: cx + rr * Math.cos(ang), y: cy + rr * Math.sin(ang), axis: a };
+    });
+
+    svg.appendChild(svgEl('polygon', {
+        points: points.map((p) => p.x.toFixed(2) + ',' + p.y.toFixed(2)).join(' '),
+        fill: 'rgba(129,140,248,0.30)',
+        stroke: '#818cf8',
+        'stroke-width': 2,
+        'stroke-linejoin': 'round',
+        'vector-effect': 'non-scaling-stroke'
+    }));
+
+    points.forEach((p) => {
+        const dot = svgEl('circle', {
+            cx: p.x.toFixed(2), cy: p.y.toFixed(2), r: 3.2,
+            fill: '#c7d2fe', stroke: '#4f46e5', 'stroke-width': 1
+        });
+        svgTitle(dot, p.axis.label + ': ' + p.axis.raw);
+        svg.appendChild(dot);
+    });
+
+    axes.forEach((a) => {
+        legend.appendChild(el('div', { class: 'bf-legend-item' }, [
+            el('span', { class: 'bf-legend-name', text: a.label }),
+            el('span', { class: 'bf-legend-val', text: a.raw })
+        ]));
+    });
+}
+
+/* --------------------------- WEAPON SCATTER ---------------------------- */
+
+function renderWeaponScatter(stats) {
+    const svg = $('bfWeaponScatter');
+    const legend = $('bfWeaponScatterLegend');
+    clear(svg);
+    clear(legend);
+
+    const live = (stats.weapons || []).filter((w) =>
+        toNum(w.kills) > 0 && toNum(w.shotsFired) > 0 && toNum(w.accuracy) > 0);
+
+    if (live.length < 2) {
+        legend.appendChild(el('div', { class: 'bf-muted', text: 'Not enough weapon data to plot yet.' }));
+        return;
+    }
+
+    const W = 340, H = 240, L = 48, R = 14, T = 16, B = 38;
+    const plotW = W - L - R;
+    const plotH = H - T - B;
+    svg.setAttribute('viewBox', '0 0 ' + W + ' ' + H);
+
+    const maxX = Math.max(1, live.reduce((m, w) => Math.max(m, toNum(w.kills)), 0));
+    const maxY = Math.max(1, live.reduce((m, w) => Math.max(m, toNum(w.accuracy)), 0));
+    const maxShots = Math.max(1, live.reduce((m, w) => Math.max(m, toNum(w.shotsFired)), 0));
+
+    const sx = (v) => L + (toNum(v) / maxX) * plotW;
+    const sy = (v) => T + plotH - (toNum(v) / maxY) * plotH;
+
+    [0.25, 0.5, 0.75, 1].forEach((f) => {
+        const y = T + plotH - f * plotH;
+        svg.appendChild(svgEl('line', {
+            x1: L, y1: y.toFixed(2), x2: L + plotW, y2: y.toFixed(2),
+            stroke: '#283548', 'stroke-width': 1, opacity: 0.5, 'vector-effect': 'non-scaling-stroke'
+        }));
+        svg.appendChild(svgText(L - 6, (y + 3).toFixed(2), fmtCompact(maxY * f), 'bf-axis-tick', 'end'));
+    });
+
+    [0.5, 1].forEach((f) => {
+        const x = L + f * plotW;
+        svg.appendChild(svgEl('line', {
+            x1: x.toFixed(2), y1: T, x2: x.toFixed(2), y2: T + plotH,
+            stroke: '#283548', 'stroke-width': 1, opacity: 0.5, 'vector-effect': 'non-scaling-stroke'
+        }));
+        svg.appendChild(svgText(x.toFixed(2), T + plotH + 16, fmtCompact(maxX * f), 'bf-axis-tick', 'middle'));
+    });
+
+    svg.appendChild(svgEl('line', {
+        x1: L, y1: T + plotH, x2: L + plotW, y2: T + plotH,
+        stroke: '#3b4a63', 'stroke-width': 1, 'vector-effect': 'non-scaling-stroke'
+    }));
+    svg.appendChild(svgEl('line', {
+        x1: L, y1: T, x2: L, y2: T + plotH,
+        stroke: '#3b4a63', 'stroke-width': 1, 'vector-effect': 'non-scaling-stroke'
+    }));
+
+    svg.appendChild(svgText(L + plotW / 2, H - 6, 'Kills', 'bf-axis-title', 'middle'));
+    const yTitle = svgText(0, 0, 'Accuracy %', 'bf-axis-title', 'middle');
+    yTitle.setAttribute('transform', 'translate(13,' + (T + plotH / 2) + ') rotate(-90)');
+    svg.appendChild(yTitle);
+
+    live.forEach((w) => {
+        const radius = 3 + 7 * Math.sqrt(toNum(w.shotsFired) / maxShots);
+        const dot = svgEl('circle', {
+            cx: sx(w.kills).toFixed(2),
+            cy: sy(w.accuracy).toFixed(2),
+            r: radius.toFixed(2),
+            fill: 'rgba(56,189,248,0.35)',
+            stroke: '#38bdf8',
+            'stroke-width': 1,
+            'vector-effect': 'non-scaling-stroke'
+        });
+        svgTitle(dot, labelOf(w, 'weaponName') + ' — ' + fmtInt(w.kills) + ' kills · '
+            + fmtPct(w.accuracy) + ' accuracy · ' + fmtInt(w.shotsFired) + ' shots');
+        svg.appendChild(dot);
+    });
+
+    legend.appendChild(el('div', {
+        class: 'bf-muted',
+        text: live.length + ' weapons with kills, shots and accuracy recorded · bubble size = shots fired · hover a bubble for details'
+    }));
+}
+
+/* -------------------------- TRACKED PROGRESS ---------------------------- */
+/* Snapshots live in localStorage only. This is a static GitHub Pages site
+   with no backend, so the trend starts at the first lookup and grows from
+   there - it can never reconstruct matches from before that. */
+
+const SNAPSHOT_KEY = 'bf6.snapshots.v1';
+const SNAPSHOT_CAP = 60;
+
+const TREND_METRICS = {
+    kd: { label: 'K/D', format: (v) => fmtNum(v), delta: (v) => (v >= 0 ? '+' : '') + fmtNum(v) },
+    accuracy: { label: 'Accuracy', format: (v) => fmtPct(v), delta: (v) => (v >= 0 ? '+' : '') + fmtNum(v, 1) + '%' },
+    winPercent: { label: 'Win rate', format: (v) => fmtPct(v), delta: (v) => (v >= 0 ? '+' : '') + fmtNum(v, 1) + '%' },
+    killsPerMinute: { label: 'Kills / min', format: (v) => fmtNum(v), delta: (v) => (v >= 0 ? '+' : '') + fmtNum(v) }
+};
+
+function readSnapshotStore() {
+    try {
+        const raw = window.localStorage.getItem(SNAPSHOT_KEY);
+        const parsed = raw ? JSON.parse(raw) : null;
+        return (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) ? parsed : {};
+    } catch (e) {
+        return {};
+    }
+}
+
+function writeSnapshotStore(store) {
+    try {
+        window.localStorage.setItem(SNAPSHOT_KEY, JSON.stringify(store));
+        return true;
+    } catch (e) {
+        return false;
+    }
+}
+
+function snapshotKey(name, platform) {
+    return String(platform || '') + '|' + String(name || '').toLowerCase();
+}
+
+function snapshotList(name, platform) {
+    const list = readSnapshotStore()[snapshotKey(name, platform)];
+    return Array.isArray(list) ? list.slice() : [];
+}
+
+function buildSnapshot(stats) {
+    const c = stats.core;
+    return {
+        t: Date.now(),
+        kills: c.kills,
+        deaths: c.deaths,
+        score: c.score,
+        kd: c.killDeath,
+        accuracy: c.accuracy,
+        winPercent: c.winPercent,
+        killsPerMinute: c.killsPerMinute,
+        matchesPlayed: c.matchesPlayed,
+        secondsPlayed: c.secondsPlayed
+    };
+}
+
+function recordSnapshot(stats, platform) {
+    const snap = buildSnapshot(stats);
+    try {
+        const store = readSnapshotStore();
+        const key = snapshotKey(stats.player.name, platform);
+        const list = Array.isArray(store[key]) ? store[key] : [];
+        const last = list.length ? list[list.length - 1] : null;
+
+        if (last && last.kills === snap.kills && last.deaths === snap.deaths && last.score === snap.score) {
+            /* Unchanged numbers (reload / re-search): refresh the timestamp
+               rather than inventing a new point of progress. */
+            last.t = snap.t;
+        } else {
+            list.push(snap);
+        }
+        while (list.length > SNAPSHOT_CAP) list.shift();
+
+        store[key] = list;
+        writeSnapshotStore(store);
+        return list;
+    } catch (e) {
+        return [snap];
+    }
+}
+
+function clearSnapshots(name, platform) {
+    try {
+        const store = readSnapshotStore();
+        delete store[snapshotKey(name, platform)];
+        writeSnapshotStore(store);
+    } catch (e) { /* ignore */ }
+}
+
+function shortDate(t) {
+    const d = new Date(toNum(t));
+    if (isNaN(d.getTime())) return '';
+    return d.toLocaleDateString(undefined, { day: '2-digit', month: 'short' });
+}
+
+function renderTrend(stats) {
+    const svg = $('bfTrendSvg');
+    const legend = $('bfTrendLegend');
+    clear(svg);
+    clear(legend);
+
+    const metricKey = appState.trendMetric;
+    const metric = TREND_METRICS[metricKey] || TREND_METRICS.kd;
+    const name = stats.player.name;
+    const platform = appState.platform;
+
+    const points = snapshotList(name, platform)
+        .map((p) => ({ t: toNum(p.t), v: toNum(p[metricKey]) }))
+        .filter((p) => isFinite(p.t) && isFinite(p.v));
+
+    const clearBtn = () => {
+        const btn = el('button', { type: 'button', class: 'bf-link-btn', text: 'Clear my saved snapshots' });
+        btn.addEventListener('click', () => {
+            clearSnapshots(name, platform);
+            renderTrend(stats);
+        });
+        return btn;
+    };
+
+    if (!points.length) {
+        legend.appendChild(el('div', {
+            class: 'bf-muted',
+            text: 'No snapshots yet. One is saved automatically in this browser each time you load a player - come back after another session to start a trend.'
+        }));
+        legend.appendChild(clearBtn());
+        return;
+    }
+
+    if (points.length === 1) {
+        legend.appendChild(el('div', {
+            class: 'bf-muted',
+            text: 'First snapshot recorded ' + shortDate(points[0].t)
+                + '. Tracking only covers sessions from your first visit onward and is stored in this browser alone - the API exposes no historical data to fill the gaps.'
+        }));
+        legend.appendChild(clearBtn());
+        return;
+    }
+
+    const first = points[0];
+    const last = points[points.length - 1];
+    const delta = last.v - first.v;
+
+    legend.appendChild(el('span', { class: 'bf-legend-item' }, [
+        el('i', { style: 'background:#818cf8' }),
+        document.createTextNode(metric.label + ': ' + metric.format(first.v) + ' → '
+            + metric.format(last.v) + ' (' + metric.delta(delta) + ')')
+    ]));
+    legend.appendChild(el('span', {
+        text: points.length + ' snapshots since ' + shortDate(first.t)
+            + ' · stored in this browser only, capped at ' + SNAPSHOT_CAP
+    }));
+    legend.appendChild(clearBtn());
+
+    const W = 1000, H = 220;
+    const padT = 16, padB = 30, padX = 14;
+    const plotH = H - padT - padB;
+    svg.setAttribute('viewBox', '0 0 ' + W + ' ' + H);
+
+    const times = points.map((p) => p.t);
+    const tMin = Math.min.apply(null, times);
+    const tMax = Math.max.apply(null, times);
+    const span = tMax - tMin;
+
+    let vMin = Math.min.apply(null, points.map((p) => p.v));
+    let vMax = Math.max.apply(null, points.map((p) => p.v));
+    if (vMax === vMin) {
+        const pad = Math.abs(vMax) * 0.05 || 1;
+        vMin -= pad;
+        vMax += pad;
+    } else {
+        const pad = (vMax - vMin) * 0.15;
+        vMin -= pad;
+        vMax += pad;
+    }
+
+    const xFor = (t) => (span > 0 ? padX + ((t - tMin) / span) * (W - padX * 2) : W / 2);
+    const yFor = (v) => padT + plotH * (1 - (v - vMin) / (vMax - vMin));
+
+    for (let g = 0; g <= 4; g++) {
+        const y = padT + (plotH * g) / 4;
+        svg.appendChild(svgEl('line', {
+            x1: 0, y1: y, x2: W, y2: y,
+            stroke: '#283548', 'stroke-width': '1',
+            'stroke-dasharray': g === 4 ? '' : '3 5',
+            'vector-effect': 'non-scaling-stroke'
+        }));
+        svg.appendChild(svgEl('text', {
+            x: 2, y: y - 3, fill: '#94a3b8', 'font-size': '11'
+        })).textContent = metric.format(vMax + (vMin - vMax) * (g / 4));
+    }
+
+    const line = points.map((p) => xFor(p.t).toFixed(1) + ',' + yFor(p.v).toFixed(1));
+    svg.appendChild(svgEl('path', {
+        d: 'M ' + line.join(' L '),
+        fill: 'none',
+        stroke: '#818cf8',
+        'stroke-width': '2.5',
+        'stroke-linejoin': 'round',
+        'stroke-linecap': 'round',
+        'vector-effect': 'non-scaling-stroke'
+    }));
+
+    points.forEach((p) => {
+        const dot = svgEl('circle', {
+            cx: xFor(p.t).toFixed(1), cy: yFor(p.v).toFixed(1), r: '3.4',
+            fill: '#0b0f19', stroke: '#818cf8', 'stroke-width': '1.8',
+            'vector-effect': 'non-scaling-stroke'
+        });
+        svgTitle(dot, shortDate(p.t) + ' · ' + metric.label + ' ' + metric.format(p.v));
+        svg.appendChild(dot);
+    });
+
+    [0, points.length - 1].forEach((i, n) => {
+        svg.appendChild(svgEl('text', {
+            x: xFor(points[i].t).toFixed(1), y: H - 8,
+            fill: '#94a3b8', 'font-size': '11',
+            'text-anchor': n === 0 ? 'start' : 'end'
+        })).textContent = shortDate(points[i].t);
+    });
+}
+
+/* --------------------- SESSION HISTORY (/manager/sessions) --------------- */
+/* Best effort: only populated for players who played on gametools-managed   */
+/* community servers. When empty the whole panel stays hidden.               */
+
+const LEGACY_PLATFORM = {
+    steam: 'pc',
+    ea: 'pc',
+    pc: 'pc',
+    epic: 'pc',
+    ps5: 'ps4',
+    ps4: 'ps4',
+    psn: 'ps4',
+    xboxseries: 'xboxone',
+    xboxone: 'xboxone',
+    xbox: 'xboxone',
+    xbl: 'xboxone'
+};
+
+function hideSessions() {
+    const panel = $('bfSessionsPanel');
+    if (panel) panel.style.display = 'none';
+}
+
+function fmtStamp(ts) {
+    const n = toNum(ts);
+    if (!n) return null;
+    const d = new Date(n > 1e12 ? n : n * 1000);
+    if (isNaN(d.getTime())) return null;
+    return d.toLocaleString();
+}
+
+function renderSessions(rows) {
+    const panel = $('bfSessionsPanel');
+    if (!panel) return;
+
+    const ordered = rows.slice().sort((a, b) => toNum(b.timeStamp) - toNum(a.timeStamp));
+    const head = $('bfSessionsHead');
+    const body = $('bfSessionsBody');
+    clear(head);
+    clear(body);
+
+    ['When', 'Server', 'Kills', 'Deaths', 'K/D', 'W / L', 'Score', 'Time', 'Modes'].forEach((label) => {
+        head.appendChild(el('th', { text: label }));
+    });
+
+    ordered.forEach((row) => {
+        const st = row.stats || {};
+        const kills = toNum(st.kills);
+        const deaths = toNum(st.deaths);
+        const wins = toNum(st.wins);
+        const losses = toNum(st.losses);
+        const modes = Array.isArray(st.gamemodes) ? st.gamemodes : [];
+
+        const when = fmtStamp(row.timeStamp);
+        const cells = [
+            when || 'unknown',
+            row.serverName || row.serverId || 'Unknown server',
+            isFinite(kills) ? fmtInt(kills) : '—',
+            isFinite(deaths) ? fmtInt(deaths) : '—',
+            deaths > 0 ? (kills / deaths).toFixed(2) : (kills > 0 ? kills.toFixed(2) : '—'),
+            (wins + losses) ? (fmtInt(wins) + ' / ' + fmtInt(losses)) : '—',
+            isFinite(toNum(st.score)) ? fmtInt(toNum(st.score)) : '—',
+            isFinite(toNum(st.timePlayed)) ? fmtInt(toNum(st.timePlayed)) : '—',
+            modes.length ? modes.join(', ') : '—'
+        ];
+
+        body.appendChild(el('tr', null, cells.map((value) => el('td', { text: String(value) }))));
+    });
+
+    $('bfSessionsCount').textContent = ordered.length + ' rounds · gametools-managed servers only';
+    panel.style.display = '';
+}
+
+async function loadSessions(name, platform) {
+    hideSessions();
+
+    const legacy = LEGACY_PLATFORM[String(platform || '').toLowerCase()];
+    if (!legacy) return;
+
+    try {
+        const data = await apiGet('/manager/sessions/', {
+            name: name,
+            platform: legacy
+        });
+        const rows = Array.isArray(data.data) ? data.data : [];
+        if (!rows.length) return;
+        renderSessions(rows);
+    } catch (err) {
+        /* Absence is the expected case — never surface an error for this panel. */
+        console.info('No session history for', name, '(', err && err.status, ')');
     }
 }
 
@@ -1235,10 +2066,10 @@ const appState = {
     platform: '',
     seasonLabel: '',
     activityDays: 7,
-    servers: [],
-    serverRegion: 'all',
+    trendMetric: 'kd',
     hasLoaded: false,
     lastStats: null,
+    lastProfile: null,
     lastQuery: null
 };
 
@@ -1281,6 +2112,14 @@ async function loadPlayer(name, platform) {
     setLoading(true, 'Loading');
 
     try {
+        /* The profile endpoint is a bonus: if it 404s the main stats must
+           still render, so its failure resolves to null instead of throwing. */
+        const profileRequest = apiGet('/bf6/profile/', { name: name, platform: platform })
+            .catch((err) => {
+                console.info('Profile panel unavailable:', err && err.status);
+                return null;
+            });
+
         const raw = await apiGet('/bf6/stats/', {
             name: name,
             platform: platform,
@@ -1290,17 +2129,30 @@ async function loadPlayer(name, platform) {
         const stats = normaliseStats(raw);
         if (!stats.player.name) throw ApiError('Player not found', 'notfound', 404);
 
+        const profile = normaliseProfile(await profileRequest);
+
         appState.name = stats.player.name;
         appState.platform = platform;
         appState.lastStats = stats;
+        appState.lastProfile = profile;
         appState.lastQuery = { name: name, platform: platform };
         appState.hasLoaded = true;
 
         renderIdentity(stats, appState.lastQuery);
         renderOverview(stats);
         renderCareer(stats);
-        renderKillBreakdown(stats);
+        renderHighlights(profile);
         renderDamageBreakdown(stats);
+        renderRadar(stats);
+        renderXpDonut(stats);
+        renderKillTypeDonut(stats);
+        renderClassTime(profile);
+        renderModeTime(profile);
+        renderWeaponClassKills(profile);
+        renderModeCompare(stats);
+        renderWeaponScatter(stats);
+        recordSnapshot(stats, platform);
+        renderTrend(stats);
         renderWeapons(stats);
         renderWeaponGroups(stats);
         renderClasses(stats);
@@ -1309,6 +2161,7 @@ async function loadPlayer(name, platform) {
         renderVehicles(stats);
         renderGadgets(stats);
         renderMelee(stats);
+        loadSessions(stats.player.name, platform);
 
         const modeLabel = $('bfCareerMode');
         if (modeLabel) modeLabel.textContent = 'multiplayer · all seasons';
@@ -1365,27 +2218,6 @@ async function loadActivity(days) {
     }
 }
 
-async function loadServers() {
-    const list = $('bfServerList');
-    try {
-        const data = await apiGet('/bf6/servers/', { region: 'all' });
-        appState.servers = Array.isArray(data.servers) ? data.servers : [];
-
-        const unique = [];
-        appState.servers.forEach((s) => {
-            if (s.region && unique.indexOf(s.region) === -1) unique.push(s.region);
-        });
-        unique.sort();
-
-        renderServerFilters(['all'].concat(unique));
-        renderServerList();
-    } catch (err) {
-        clear(list);
-        list.appendChild(el('div', { class: 'bf-muted', text: 'Server list is unavailable right now.' }));
-        console.warn('Server list failed:', err);
-    }
-}
-
 /* -------------------------------- INIT --------------------------------- */
 
 function wireActivityToggle() {
@@ -1400,9 +2232,23 @@ function wireActivityToggle() {
     });
 }
 
+function wireTrendToggle() {
+    const group = $('bfTrendMetric');
+    if (!group) return;
+    Array.prototype.forEach.call(group.querySelectorAll('button'), (btn) => {
+        btn.addEventListener('click', () => {
+            Array.prototype.forEach.call(group.querySelectorAll('button'), (b) => b.classList.remove('active'));
+            btn.classList.add('active');
+            appState.trendMetric = btn.dataset.metric || 'kd';
+            if (appState.lastStats) renderTrend(appState.lastStats);
+        });
+    });
+}
+
 function init() {
     populatePlatforms();
     wireActivityToggle();
+    wireTrendToggle();
 
     $('bfSearchForm').addEventListener('submit', (ev) => {
         ev.preventDefault();
@@ -1416,7 +2262,6 @@ function init() {
     /* Player-independent live panels load alongside the first lookup. */
     loadSeason();
     loadActivity(appState.activityDays);
-    loadServers();
 
     const query = readUrl() || DEFAULT_PLAYER;
     $('bfNameInput').value = query.name;

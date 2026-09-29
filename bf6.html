@@ -63,6 +63,15 @@
             <!-- Overview stat cards -->
             <div class="bf-stat-grid" id="bfOverview"></div>
 
+            <!-- Player highlights (from /bf6/profile/) -->
+            <div class="bf-panel">
+                <div class="bf-panel-head">
+                    <h2>🏅 Player Highlights</h2>
+                    <span class="bf-count" id="bfHighlightsSource"></span>
+                </div>
+                <div class="bf-panel-body" id="bfHighlights"></div>
+            </div>
+
             <!-- Career / objective totals -->
             <div class="bf-panel">
                 <div class="bf-panel-head">
@@ -72,22 +81,116 @@
                 <div class="bf-panel-body" id="bfCareer"></div>
             </div>
 
-            <div class="bf-split">
-                <!-- Kill breakdown -->
+            <!-- Player diagrams -->
+            <div class="bf-chart-grid">
                 <div class="bf-panel">
                     <div class="bf-panel-head">
-                        <h2>🎯 Kill Breakdown</h2>
+                        <h2>🕸️ Performance Profile</h2>
+                        <span class="bf-count">normalised 0-100</span>
                     </div>
-                    <div class="bf-panel-body" id="bfKillBreakdown"></div>
+                    <div class="bf-panel-body">
+                        <div class="bf-chart-figure">
+                            <svg class="bf-radar-svg" id="bfRadarSvg"></svg>
+                        </div>
+                        <div class="bf-chart-legend" id="bfRadarLegend"></div>
+                    </div>
                 </div>
 
-                <!-- Damage / assists breakdown -->
+                <div class="bf-panel">
+                    <div class="bf-panel-head">
+                        <h2>✨ XP Composition</h2>
+                    </div>
+                    <div class="bf-panel-body">
+                        <div class="bf-chart-figure">
+                            <svg class="bf-donut-svg" id="bfXpDonutSvg"></svg>
+                        </div>
+                        <div class="bf-chart-legend" id="bfXpDonutLegend"></div>
+                    </div>
+                </div>
+
+                <div class="bf-panel">
+                    <div class="bf-panel-head">
+                        <h2>🎯 Kills by Type</h2>
+                    </div>
+                    <div class="bf-panel-body">
+                        <div class="bf-chart-figure">
+                            <svg class="bf-donut-svg" id="bfKillDonutSvg"></svg>
+                        </div>
+                        <div class="bf-chart-legend" id="bfKillDonutLegend"></div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="bf-chart-grid">
+                <div class="bf-panel">
+                    <div class="bf-panel-head">
+                        <h2>🎖️ Time per Class</h2>
+                    </div>
+                    <div class="bf-panel-body" id="bfClassTime"></div>
+                </div>
+
+                <div class="bf-panel">
+                    <div class="bf-panel-head">
+                        <h2>🕹️ Time per Mode</h2>
+                    </div>
+                    <div class="bf-panel-body" id="bfModeTime"></div>
+                </div>
+
+                <div class="bf-panel">
+                    <div class="bf-panel-head">
+                        <h2>🔫 Kills per Weapon Class</h2>
+                    </div>
+                    <div class="bf-panel-body" id="bfWeaponClassKills"></div>
+                </div>
+            </div>
+
+            <div class="bf-chart-grid">
+                <div class="bf-panel">
+                    <div class="bf-panel-head">
+                        <h2>⚖️ Mode Comparison</h2>
+                        <span class="bf-count" id="bfModeCompareCount"></span>
+                    </div>
+                    <div class="bf-panel-body" id="bfModeCompare"></div>
+                </div>
+
+                <div class="bf-panel">
+                    <div class="bf-panel-head">
+                        <h2>🎯 Weapon Performance</h2>
+                        <span class="bf-count">kills vs accuracy</span>
+                    </div>
+                    <div class="bf-panel-body">
+                        <div class="bf-chart-figure">
+                            <svg class="bf-scatter-svg" id="bfWeaponScatter"></svg>
+                        </div>
+                        <div class="bf-chart-legend" id="bfWeaponScatterLegend"></div>
+                    </div>
+                </div>
+
                 <div class="bf-panel">
                     <div class="bf-panel-head">
                         <h2>💥 Damage &amp; Assist Breakdown</h2>
                     </div>
                     <div class="bf-panel-body" id="bfDamageBreakdown"></div>
                 </div>
+            </div>
+
+            <!-- Tracked progress (client-side snapshots) -->
+            <div class="bf-panel">
+                <div class="bf-panel-head">
+                    <h2>📊 My Tracked Progress</h2>
+                    <div class="bf-chart-head">
+                        <div class="bf-toggle-group" id="bfTrendMetric">
+                            <button type="button" data-metric="kd" class="active">K/D</button>
+                            <button type="button" data-metric="accuracy">Accuracy</button>
+                            <button type="button" data-metric="winPercent">Win rate</button>
+                            <button type="button" data-metric="killsPerMinute">Kills/min</button>
+                        </div>
+                    </div>
+                </div>
+                <div class="bf-chart-box">
+                    <svg class="bf-chart-svg" id="bfTrendSvg" preserveAspectRatio="none"></svg>
+                </div>
+                <div class="bf-chart-legend" id="bfTrendLegend"></div>
             </div>
 
             <!-- Weapons -->
@@ -224,15 +327,20 @@
                 <div class="bf-chart-legend" id="bfActivityLegend"></div>
             </div>
 
-            <!-- Live server browser -->
-            <div class="bf-panel">
+            <!-- Round-by-round session history (hidden when unavailable) -->
+            <div class="bf-panel" id="bfSessionsPanel" style="display:none;">
                 <div class="bf-panel-head">
-                    <h2>🖥️ Live Portal Servers</h2>
-                    <div class="bf-filters" id="bfServerFilters"></div>
+                    <h2>🗓️ Session History</h2>
+                    <span class="bf-count" id="bfSessionsCount"></span>
                 </div>
-                <div class="bf-panel-body">
-                    <div class="bf-server-list" id="bfServerList">
-                        <div class="bf-muted">Loading servers…</div>
+                <div class="bf-panel-body flush">
+                    <div class="bf-table-wrap">
+                        <table class="bf-table">
+                            <thead>
+                                <tr id="bfSessionsHead"></tr>
+                            </thead>
+                            <tbody id="bfSessionsBody"></tbody>
+                        </table>
                     </div>
                 </div>
             </div>

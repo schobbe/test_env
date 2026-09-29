@@ -22,7 +22,19 @@ A single-page dashboard for Battlefield 6 stats, built on the community-run
   weapons (sortable table), weapon groups, classes, game modes, maps,
   vehicles/archetypes, gadgets, melee and career/objective totals.
 * Live panels that are independent of the lookup: an hourly BF6 activity chart
-  (`/bf6/statusarray/`) and a portal server browser (`/bf6/servers/`).
+  (`/bf6/statusarray/`).
+* Nine diagrams drawn as inline SVG/CSS (no chart library): a normalised
+  performance radar, XP composition and kill-type donuts, time per class,
+  time per mode, kills per weapon class, a per-mode comparison, a weapon
+  scatter of kills vs accuracy and the damage/assist breakdown.
+* **Player Highlights** from `/bf6/profile/` — rank, record, dog tags, longest
+  kill, best killstreak, ranked/competitive ranks and top badges.
+* **My Tracked Progress** — a snapshot trend (K/D, accuracy, win rate, kills/min)
+  recorded in this browser's `localStorage`. This is deliberately *not* sold as
+  historical data: it starts with your first visit and nothing before that can
+  be reconstructed, so the panel says so up front.
+* **Session History** — best-effort round-by-round table from
+  `/manager/sessions/`, shown only when the endpoint actually returns rows.
 * Shareable URLs, e.g. `bf6.html?name=offroad89&platform=steam`.
 * **No game artwork is used.** All visuals are CSS-drawn or inline SVG, and no
   images are requested from any asset CDN. Statistics are © EA / DICE.
@@ -36,4 +48,15 @@ A single-page dashboard for Battlefield 6 stats, built on the community-run
 * The OpenAPI example payload for `/bf6/stats/` is stale Battlefield 2042 data
   (PP-29, "Mackay"), so the real response shape was mapped empirically.
 * Player names are matched **exactly** — there is no fuzzy search endpoint.
+* `/bf6/profile/` is the only endpoint carrying career "records" (rank, badges,
+  competitive ranks, `tp_kit_*`/`tp_gm_*` time and `kills_*_total` weapon-class
+  kills). Its `stats` array holds ~339 duplicated names of which only ~204 are
+  non-null, so the normaliser keeps the first non-null value per name and every
+  diagram degrades to an empty state when a field is missing.
+* There is **no** match history or time series for ordinary players:
+  `/bf6/history/` and `/bf6/battlelog/` are `404`, `perSeason` comes back as an
+  empty object, and `/manager/sessions/` answers `{"data":[]}` for almost every
+  account — it only knows rounds played on gametools-managed community servers
+  and only accepts the legacy platforms `pc` / `ps4` / `xboxone`. That is why
+  the session panel hides itself instead of showing an error.
 
