@@ -546,3 +546,193 @@ input:checked + .slider:before {
         height: 50vh;
     }
 }
+
+/* =========================================================
+   WIKI PAGE  (wiki.html)
+   Every rule is namespaced under .wiki-page, exactly like the
+   map dashboard rules above, so nothing here can affect
+   index.html or map.html.
+   ========================================================= */
+
+.wiki-page main {
+    padding: 30px 0 50px;
+}
+
+.wiki-page .wiki-toc {
+    background: white;
+    border-radius: 8px;
+    padding: 18px 22px;
+    margin-bottom: 35px;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.wiki-page .wiki-toc strong {
+    display: block;
+    color: #667eea;
+    text-transform: uppercase;
+    font-size: 0.8em;
+    letter-spacing: 0.08em;
+    margin-bottom: 8px;
+}
+
+.wiki-page .wiki-toc ol {
+    list-style: decimal inside;
+    columns: 2;
+    column-gap: 30px;
+}
+
+.wiki-page .wiki-toc li {
+    padding: 2px 0;
+}
+
+.wiki-page .wiki-toc a,
+.wiki-page .wiki-top a {
+    color: #667eea;
+    text-decoration: none;
+}
+
+.wiki-page .wiki-toc a:hover,
+.wiki-page .wiki-top a:hover {
+    text-decoration: underline;
+}
+
+.wiki-page section {
+    scroll-margin-top: 20px;
+}
+
+.wiki-page h2 {
+    scroll-margin-top: 20px;
+}
+
+.wiki-page h3 {
+    color: #764ba2;
+    font-size: 1.12em;
+    margin: 26px 0 10px;
+}
+
+.wiki-page p,
+.wiki-page li {
+    color: #444;
+}
+
+.wiki-page section > p + p {
+    margin-top: 12px;
+}
+
+.wiki-page .wiki-list {
+    list-style: disc inside;
+    margin: 12px 0;
+}
+
+.wiki-page .wiki-list li {
+    padding: 3px 0;
+}
+
+.wiki-page .wiki-list a {
+    color: #667eea;
+    text-decoration: none;
+}
+
+.wiki-page .wiki-list a:hover {
+    text-decoration: underline;
+}
+
+.wiki-page .wiki-top {
+    text-align: right;
+    font-size: 0.85em;
+    margin: -18px 0 30px;
+}
+
+.wiki-page code {
+    font-family: 'Consolas', 'Menlo', 'Courier New', monospace;
+    font-size: 0.88em;
+    background: #eef0f8;
+    color: #4a3f8f;
+    padding: 1px 5px;
+    border-radius: 3px;
+}
+
+.wiki-page .wiki-pre {
+    background: #1e2532;
+    color: #d7e0ee;
+    padding: 16px 18px;
+    border-radius: 8px;
+    overflow-x: auto;
+    margin: 14px 0;
+    line-height: 1.45;
+}
+
+.wiki-page .wiki-pre code {
+    background: none;
+    color: inherit;
+    padding: 0;
+}
+
+.wiki-page .wiki-table {
+    width: 100%;
+    border-collapse: collapse;
+    background: white;
+    border-radius: 8px;
+    overflow: hidden;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.08);
+    margin: 14px 0 18px;
+    font-size: 0.92em;
+}
+
+.wiki-page .wiki-table thead th {
+    background: #667eea;
+    color: white;
+    text-align: left;
+    padding: 10px 12px;
+    font-weight: 600;
+}
+
+.wiki-page .wiki-table th,
+.wiki-page .wiki-table td {
+    padding: 9px 12px;
+    border-bottom: 1px solid #ececf2;
+    vertical-align: top;
+    color: #444;
+}
+
+.wiki-page .wiki-table tbody th {
+    text-align: left;
+    color: #764ba2;
+    white-space: nowrap;
+}
+
+.wiki-page .wiki-table tbody tr:last-child th,
+.wiki-page .wiki-table tbody tr:last-child td {
+    border-bottom: none;
+}
+
+.wiki-page .wiki-table tbody tr:nth-child(even) {
+    background: #fafaff;
+}
+
+.wiki-page .wiki-note {
+    background: #f3f1fd;
+    border-left: 4px solid #764ba2;
+    border-radius: 0 6px 6px 0;
+    padding: 12px 16px;
+    margin: 16px 0;
+    color: #4a4459;
+    font-size: 0.95em;
+}
+
+.wiki-page .wiki-note strong {
+    color: #764ba2;
+}
+
+@media (max-width: 700px) {
+    .wiki-page .wiki-toc ol {
+        columns: 1;
+    }
+
+    .wiki-page .wiki-table {
+        display: block;
+        overflow-x: auto;
+        white-space: nowrap;
+    }
+}
+

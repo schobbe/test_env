@@ -1,0 +1,461 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Site Wiki — test_env</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body class="wiki-page">
+    <header>
+        <nav class="nav-bar">
+            <div class="nav-container">
+                <a href="index.html" class="nav-brand">test_env</a>
+                <ul class="nav-links">
+                    <li><a href="index.html">Home</a></li>
+                    <li><a href="map.html">Interactive Map</a></li>
+                    <li><a href="bf6.html">BF6 Stats</a></li>
+                    <li><a href="wiki.html" class="active">Wiki</a></li>
+                </ul>
+            </div>
+        </nav>
+        <div class="container">
+            <h1>Site Wiki</h1>
+            <p class="subtitle">How this site is structured, the workflows behind it, and what every chart means</p>
+        </div>
+    </header>
+
+    <main>
+        <div class="container">
+
+            <nav class="wiki-toc" id="contents" aria-label="Contents">
+                <strong>Contents</strong>
+                <ol>
+                    <li><a href="#overview">Overview</a></li>
+                    <li><a href="#structure">Repository structure</a></li>
+                    <li><a href="#styling">The two styling worlds</a></li>
+                    <li><a href="#architecture">Dashboard architecture</a></li>
+                    <li><a href="#workflows">Workflows</a></li>
+                    <li><a href="#charts">Charts explained</a></li>
+                    <li><a href="#conventions">Conventions and gotchas</a></li>
+                    <li><a href="#local">Running locally</a></li>
+                </ol>
+            </nav>
+
+            <section id="overview">
+                <h2>1. Overview</h2>
+                <p>
+                    Everything here is a static site hosted on <strong>GitHub Pages</strong> straight from the
+                    repository root. There is no build step, no bundler, no framework and no backend of our own:
+                    the browser fetches plain HTML, CSS and JavaScript and talks to public APIs directly.
+                </p>
+                <p>
+                    The BF6 dashboard in particular has <strong>no third-party JavaScript and no images at all</strong> —
+                    every visual is hand-drawn inline SVG or CSS. (The one exception in the whole repo is
+                    <code>map.html</code>, which loads Leaflet from unpkg.)
+                </p>
+                <ul class="wiki-list">
+                    <li><a href="index.html"><strong>index.html</strong></a> — landing page, project cards, counter demo.</li>
+                    <li><a href="map.html"><strong>map.html</strong></a> + <code>map.js</code> — World Explorer: zoomable map, live weather (Open-Meteo), rain radar (RainViewer).</li>
+                    <li><a href="bf6.html"><strong>bf6.html</strong></a> + <code>bf6.css</code> + <code>bf6.js</code> — the BF6 player statistics dashboard, documented in the rest of this wiki.</li>
+                    <li><strong>wiki.html</strong> — this page.</li>
+                </ul>
+            </section>
+
+            <p class="wiki-top"><a href="#contents">↑ Contents</a></p>
+
+            <section id="structure">
+                <h2>2. Repository structure</h2>
+                <p>
+                    Every file lives at the repository root, so Pages serves flat URLs
+                    (<code>/bf6.html</code>, not <code>/some/folder/bf6.html</code>).
+                </p>
+                <table class="wiki-table">
+                    <thead>
+                        <tr><th>File</th><th>Role</th><th>Loaded by</th></tr>
+                    </thead>
+                    <tbody>
+                        <tr><td><code>index.html</code></td><td>Landing page, project cards, counter demo</td><td><code>style.css</code>, <code>script.js</code></td></tr>
+                        <tr><td><code>map.html</code></td><td>World Explorer map and weather dashboard</td><td><code>style.css</code>, <code>map.js</code>, Leaflet (unpkg)</td></tr>
+                        <tr><td><code>bf6.html</code></td><td>BF6 statistics dashboard markup — one <code>.bf-panel</code> per feature</td><td><code>bf6.css</code>, <code>bf6.js</code></td></tr>
+                        <tr><td><code>wiki.html</code></td><td>This wiki</td><td><code>style.css</code></td></tr>
+                        <tr><td><code>style.css</code></td><td>Shared styles for the landing page, map and wiki. Map and wiki rules are namespaced so they cannot leak onto the landing page.</td><td>—</td></tr>
+                        <tr><td><code>bf6.css</code></td><td>Dashboard dark theme built on <code>--bf-*</code> custom properties</td><td>—</td></tr>
+                        <tr><td><code>bf6.js</code></td><td>Dashboard logic, ~92 KB, ~2 400 lines, zero dependencies</td><td>—</td></tr>
+                        <tr><td><code>map.js</code></td><td>Map, weather and radar logic</td><td>—</td></tr>
+                        <tr><td><code>script.js</code></td><td>Counter demo on the landing page</td><td>—</td></tr>
+                        <tr><td><code>README.md</code></td><td>Repo overview and API notes</td><td>—</td></tr>
+                        <tr><td><code>Hello_World.py</code>, <code>.gitignore</code></td><td>Unrelated first script and ignore rules</td><td>—</td></tr>
+                    </tbody>
+                </table>
+            </section>
+
+            <p class="wiki-top"><a href="#contents">↑ Contents</a></p>
+
+            <section id="styling">
+                <h2>3. The two styling worlds</h2>
+                <p>
+                    The repo has two separate stylesheets, and mixing them up is the easiest way to break a page.
+                </p>
+                <table class="wiki-table">
+                    <thead>
+                        <tr><th></th><th><code>style.css</code></th><th><code>bf6.css</code></th></tr>
+                    </thead>
+                    <tbody>
+                        <tr><th>Serves</th><td><code>index.html</code>, <code>map.html</code>, <code>wiki.html</code></td><td><code>bf6.html</code></td></tr>
+                        <tr><th>Look</th><td>Light background (<code>#f5f5f5</code>), purple gradient header (<code>#667eea → #764ba2</code>), white cards</td><td>Dark theme driven by <code>--bf-accent: #818cf8</code>, <code>--bf-cyan</code>, <code>--bf-amber</code></td></tr>
+                        <tr><th>Layout</th><td>Element selectors plus a <code>.container</code> capped at 1000 px</td><td><code>.bf-panel</code> → <code>.bf-panel-head</code> + <code>.bf-panel-body</code>, <code>.bf-stat-grid</code>, <code>.bf-table-wrap</code></td></tr>
+                        <tr><th>Namespacing</th><td>Map rules sit under <code>body.map-dashboard-page</code>; wiki rules under <code>body.wiki-page</code></td><td>The whole file belongs to one page, so none is needed</td></tr>
+                    </tbody>
+                </table>
+                <div class="wiki-note">
+                    <strong>Why namespacing matters:</strong> <code>style.css</code> is shared by three pages. The map's
+                    full-screen dark dashboard styles would wreck the landing page if they were bare selectors, so they
+                    are prefixed with <code>.map-dashboard-page</code>. Everything added for this wiki is prefixed with
+                    <code>.wiki-page</code> for exactly the same reason.
+                </div>
+            </section>
+
+            <p class="wiki-top"><a href="#contents">↑ Contents</a></p>
+
+            <section id="architecture">
+                <h2>4. Dashboard architecture</h2>
+                <p>
+                    <code>bf6.js</code> is a single file, but it is not monolithic: banner comments divide it into
+                    layers that each do one job. Reading the banners top to bottom gives you the data path.
+                </p>
+                <table class="wiki-table">
+                    <thead>
+                        <tr><th>Layer</th><th>Banner sections</th><th>What lives there</th></tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td><strong>Foundations</strong></td>
+                            <td>CONFIG · HELPERS · FORMATTING · SMALL VISUALS</td>
+                            <td>Constants (<code>API_BASE</code>, limits), <code>$()</code>/<code>el()</code>/<code>clear()</code>, <code>fmtInt</code>/<code>fmtPct</code>/<code>fmtDuration</code>, small CSS-drawn visuals</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Data in</strong></td>
+                            <td>LOCAL CACHE / LIMITS · API LAYER</td>
+                            <td>The response cache and <code>apiGet()</code>: throttle, timeout, retry, cache</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Shape</strong></td>
+                            <td>NORMALISATION LAYER</td>
+                            <td><code>normaliseStats()</code> and <code>normaliseProfile()</code> turn inconsistent API payloads into a stable shape the render layer can rely on</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Data out</strong></td>
+                            <td>RENDER LAYER · IDENTITY · OVERVIEW · CAREER · WEAPONS · CLASSES · … · SORTABLE TABLES</td>
+                            <td>One <code>render*()</code> function per panel. Each clears its own node, then fills it or shows an empty state</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Diagrams</strong></td>
+                            <td>INLINE SVG CHART · DIAGRAMS · RADAR CHART · WEAPON SCATTER · TRACKED PROGRESS · SESSION HISTORY</td>
+                            <td>The SVG primitives and the visuals catalogued in section 6</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Orchestration</strong></td>
+                            <td>CONTROLLER · LOADERS · INIT</td>
+                            <td><code>appState</code>, URL and platform handling, <code>loadPlayer()</code> and friends, then <code>init()</code> which wires every listener</td>
+                        </tr>
+                    </tbody>
+                </table>
+                <p>
+                    On the HTML side the rule is the same everywhere: a panel is <code>.bf-panel</code> containing a
+                    <code>.bf-panel-head</code> (heading plus an optional <code>.bf-count</code> caption) and a
+                    <code>.bf-panel-body</code>, which is the node a render function targets. Related panels sit in a
+                    <code>.bf-chart-grid</code> or a <code>.bf-split</code>.
+                </p>
+                <div class="wiki-note">
+                    <strong>The render contract:</strong> every render function owns one DOM node, calls
+                    <code>clear(node)</code> first, and when there is nothing to show appends a
+                    <code>div.bf-muted</code> with a plain-language message instead of leaving a hole or throwing.
+                    That is why around half of the profile fields arriving as <code>null</code> never produces a blank panel.
+                </div>
+            </section>
+
+            <p class="wiki-top"><a href="#contents">↑ Contents</a></p>
+
+            <section id="workflows">
+                <h2>5. Workflows</h2>
+
+                <h3>5.1 What happens on page load</h3>
+                <p>
+                    <code>init()</code> runs once at the bottom of <code>bf6.js</code> and does the same things in the
+                    same order every time:
+                </p>
+                <ol class="wiki-list">
+                    <li><code>populatePlatforms()</code> fills the platform select (PC, PSN, XBL).</li>
+                    <li><code>initPlatformSelect()</code> defaults to PC and re-looks-up on change.</li>
+                    <li>Every "top N" toggle and the sortable table headers get their listeners.</li>
+                    <li>The search form, the <strong>Save</strong> button and the clear links get their listeners.</li>
+                    <li><code>renderRecent()</code> and <code>renderSaved()</code> paint the stored chips, so the page is useful before any request leaves the browser.</li>
+                    <li><code>loadSeason()</code> and <code>loadActivity()</code> run — both are player-independent.</li>
+                    <li>The URL is read; if it carries a name, <code>loadPlayer()</code> is called immediately.</li>
+                </ol>
+
+                <h3>5.2 The lookup pipeline</h3>
+                <p>This is the main flow of the whole page:</p>
+<pre class="wiki-pre">
+  submit / chip click / URL param
+                 |
+                 v
+     loadPlayer(name, platform)
+                 |
+     +-----------+-----------+
+     |                       |
+  /bf6/profile/         /bf6/stats/          both via apiGet()
+  (optional: failure     (required)
+   resolves to null)          |
+     |                       v
+     |               normaliseStats(raw)
+     |               normaliseProfile(raw)
+     +-----------+-----------+
+                 v
+     renderIdentity() ... renderMelee()      ~30 panels, in page order
+                 |
+                 v
+     recordSnapshot() -> renderTrend()       stores one row per lookup
+                 |
+                 v
+     loadSessions()  -> /manager/sessions/   hides itself if empty
+                 |
+                 v
+     pushRecent(name, platform) -> renderRecent()
+     updateUrl(name, platform)              history.replaceState()
+</pre>
+                <p>
+                    Profile and stats are requested together but the profile is <em>optional</em>: if it fails,
+                    <code>loadPlayer()</code> still receives <code>null</code> and renders the statistics with the
+                    identity panels showing empty states. A player always sees numbers rather than an error screen.
+                </p>
+
+                <h3>5.3 Being polite to the API</h3>
+                <p>
+                    All traffic goes to the public <code>gametools.network</code> API, so every request is funnelled
+                    through one function, <code>apiGet()</code>, which enforces four limits defined at the top of the file:
+                </p>
+                <table class="wiki-table">
+                    <thead>
+                        <tr><th>Constant</th><th>Value</th><th>Purpose</th></tr>
+                    </thead>
+                    <tbody>
+                        <tr><td><code>THROTTLE_MS</code></td><td>1 000</td><td>At most one outbound request per second. Implemented as a promise chain rather than a timestamp check, so concurrent callers queue instead of colliding.</td></tr>
+                        <tr><td><code>CACHE_TTL_MS</code></td><td>10 minutes</td><td>Responses are stored in <code>localStorage</code> keyed by the full URL and reused while fresh. The value mirrors the API's own <code>cache-control: max-age=600</code>.</td></tr>
+                        <tr><td><code>REQUEST_TIMEOUT_MS</code></td><td>12 000</td><td>An <code>AbortController</code> cancels slow requests so the page never hangs on a spinner.</td></tr>
+                        <tr><td><code>MAX_RETRIES</code></td><td>1</td><td>A single retry, and only for transient 5xx responses. 404 is not retried — it means the player does not exist.</td></tr>
+                    </tbody>
+                </table>
+                <p>
+                    The practical effect: re-running the same search within ten minutes is instant, and hammering the
+                    enter key cannot flood the API.
+                </p>
+
+                <h3>5.4 The four localStorage stores</h3>
+                <p>
+                    The dashboard keeps state in the browser because it has no backend. Each store is versioned in its
+                    key so an old format can be discarded rather than migrated.
+                </p>
+                <table class="wiki-table">
+                    <thead>
+                        <tr><th>Key</th><th>Cap</th><th>Holds</th><th>Cleared by</th></tr>
+                    </thead>
+                    <tbody>
+                        <tr><td><code>&lt;request URL&gt;</code></td><td>pruned to the newest entries</td><td>Raw API responses plus their fetch time</td><td>TTL expiry (10 min)</td></tr>
+                        <tr><td><code>bf6.recent.v1</code></td><td>6 entries</td><td>The last lookups, newest first, as the chips under the search box</td><td><em>Clear</em> link, or overflow</td></tr>
+                        <tr><td><code>bf6.saved.v1</code></td><td>12 entries</td><td>Names you pinned with the Save button. Saving the same name on another platform moves the entry instead of duplicating it.</td><td>Clicking a chip's ×, or the <em>Clear</em> link</td></tr>
+                        <tr><td><code>bf6.snapshots.v1</code></td><td>60 rows</td><td>One row per lookup: time, name, platform, K/D, win rate, accuracy, kills, deaths, score. Feeds the trend chart.</td><td>Overflow (oldest dropped)</td></tr>
+                    </tbody>
+                </table>
+                <div class="wiki-note">
+                    <strong>All four are per-browser and per-machine.</strong> Nothing is uploaded, so saved players,
+                    recent searches and trend history do not follow you to another device or browser, and clearing
+                    site data erases them.
+                </div>
+
+                <h3>5.5 Sharing, and what the URL carries</h3>
+                <p>
+                    After a lookup the URL becomes <code>bf6.html?name=PlayerName&amp;platform=pc</code> via
+                    <code>history.replaceState()</code>, so the address bar or a bookmark always reloads exactly what
+                    you are looking at. Because <code>replaceState</code> is used rather than <code>pushState</code>,
+                    typing five names does not fill the back button with five history entries.
+                </p>
+
+                <h3>5.6 Errors and empty data</h3>
+                <ul class="wiki-list">
+                    <li><strong>Unknown player</strong> — the API answers 404; the error banner names the platform it searched, because misspelled names are usually a platform mismatch.</li>
+                    <li><strong>Profile unavailable</strong> — treated as optional; stats still render.</li>
+                    <li><strong>Sessions empty</strong> — the panel hides itself instead of showing a zero.</li>
+                    <li><strong>Field is <code>null</code></strong> — the panel shows a plain-language empty state. Many of the ~270 profile fields are <code>null</code> even for active players, so this is the normal path, not an edge case.</li>
+                </ul>
+            </section>
+
+            <p class="wiki-top"><a href="#contents">↑ Contents</a></p>
+
+            <section id="charts">
+                <h2>6. Charts explained</h2>
+                <p>
+                    Every diagram on the dashboard is drawn by hand into an inline <code>&lt;svg&gt;</code> element
+                    using one helper, <code>svgEl(tag, attrs)</code>, plus <code>svgText()</code> for labels and
+                    <code>svgTitle()</code> for native hover tooltips. There is no chart library and not a single
+                    image file: each figure declares a <code>viewBox</code> and scales to the width of its panel.
+                </p>
+                <table class="wiki-table">
+                    <thead>
+                        <tr><th>Visual</th><th>Renderer</th><th>Node</th><th>Backed by</th></tr>
+                    </thead>
+                    <tbody>
+                        <tr><td>XP split (donut)</td><td><code>renderXpDonut</code></td><td><code>bfXpDonutSvg</code></td><td>Total / performance / accolades XP — the API returns these as a one-element array <code>d.XP[0]</code></td></tr>
+                        <tr><td>Kill types (donut)</td><td><code>renderKillTypeDonut</code></td><td><code>bfKillDonutSvg</code></td><td>The <code>KILL_LABELS</code> breakdown: infantry, vehicle, gadget, melee and so on</td></tr>
+                        <tr><td>Performance profile (radar)</td><td><code>renderRadar</code></td><td><code>bfRadarSvg</code></td><td>Eight normalised core stats, listed below</td></tr>
+                        <tr><td>Class time (bars)</td><td><code>renderClassTime</code></td><td><code>bfClassTime</code></td><td><code>profile.kitTime</code> — the <code>tp_kit_*</code> profile fields</td></tr>
+                        <tr><td>Mode time (bars)</td><td><code>renderModeTime</code></td><td><code>bfModeTime</code></td><td><code>tp_gm_*</code> per mode plus <code>tp_veh</code> in vehicles</td></tr>
+                        <tr><td>Weapon class kills (bars)</td><td><code>renderWeaponClassKills</code></td><td><code>bfWeaponClassKills</code></td><td><code>kills_*_total</code> from the profile</td></tr>
+                        <tr><td>Weapon groups (bars)</td><td><code>renderWeaponGroups</code></td><td><code>bfWeaponGroups</code></td><td>Kills rolled up per weapon group</td></tr>
+                        <tr><td>Mode comparison (bars)</td><td><code>renderModeCompare</code></td><td><code>bfModeCompare</code></td><td><code>perGamemode</code>: K/D, win rate and accuracy side by side</td></tr>
+                        <tr><td>Weapon accuracy map (scatter)</td><td><code>renderWeaponScatter</code></td><td><code>bfWeaponScatter</code></td><td>One dot per weapon with kills, shots and accuracy</td></tr>
+                        <tr><td>Damage attribution</td><td><code>renderDamageBreakdown</code></td><td><code>bfDamageBreakdown</code></td><td><code>devidedDamage</code> / <code>devidedAssists</code> — the API's own spelling</td></tr>
+                        <tr><td>Live player activity (line)</td><td><code>renderActivityChart</code></td><td><code>bfActivitySvg</code></td><td><code>/bf6/statusarray/</code>, hourly counts across a week</td></tr>
+                        <tr><td>My tracked progress (line)</td><td><code>renderTrend</code></td><td><code>bfTrendSvg</code></td><td>Your own <code>bf6.snapshots.v1</code> rows — not API data</td></tr>
+                    </tbody>
+                </table>
+                <h3>6.1 Donuts</h3>
+                <p>
+                    <code>renderDonut()</code> draws the two ring charts. Each slice is a full <code>&lt;circle&gt;</code>
+                    whose coloured part is produced by <code>stroke-dasharray</code> — a dash as long as the slice's
+                    share of the circumference, followed by a gap as long as the rest — combined with
+                    <code>stroke-dashoffset</code> to start each slice where the previous one ended.
+                </p>
+                <div class="wiki-note">
+                    <strong>Why not arc paths?</strong> A single 100 % slice has no start and end angle, so it cannot be
+                    expressed as an SVG arc at all — the path collapses and nothing is drawn. Players whose XP is 100 %
+                    performance XP are common, so the dash technique is used because a circle with a full-length dash
+                    renders correctly.
+                </div>
+                <p>
+                    Zero-valued slices are filtered out first, the centre text is a <code>&lt;text&gt;</code> element,
+                    and the legend beside it is ordinary HTML rather than SVG so long labels wrap.
+                </p>
+
+                <h3>6.2 Radar</h3>
+                <p>
+                    Eight axes, each divided by its own realistic ceiling and clamped to 0–100 % with
+                    <code>clampScore()</code>, then plotted around a circle and joined into a filled
+                    <code>&lt;polygon&gt;</code>. Four background rings (25 / 50 / 75 / 100 %) and the axis spokes are
+                    drawn first, so the shape always reads against a scale.
+                </p>
+                <table class="wiki-table">
+                    <thead>
+                        <tr><th>Axis</th><th>Plotted at 100 %</th><th>Why that ceiling</th></tr>
+                    </thead>
+                    <tbody>
+                        <tr><td>K/D</td><td>3</td><td>A strong ratio; above this is rare</td></tr>
+                        <tr><td>Kills/min</td><td>4</td><td>Sprint tempo, not turtling</td></tr>
+                        <tr><td>Damage/min</td><td>800</td><td>High but reachable on a good round</td></tr>
+                        <tr><td>Accuracy</td><td>50 %</td><td>Sustained fire rarely exceeds it</td></tr>
+                        <tr><td>Headshot rate</td><td>70 %</td><td>Sniper-heavy players approach it</td></tr>
+                        <tr><td>Win rate</td><td>100 %</td><td>Already a percentage</td></tr>
+                        <tr><td>Revives/match</td><td>3</td><td>Support-heavy play</td></tr>
+                        <tr><td>Objective time/match</td><td>600 s</td><td>Roughly ten minutes of objective time</td></tr>
+                    </tbody>
+                </table>
+                <p>
+                    The ceilings are a display heuristic invented here, not a scale the game defines. They exist so that
+                    a 25 % accuracy — genuinely good — does not render as a flat edge against a naive 0–100 axis. Each
+                    axis label in the legend still shows the <em>real</em> value, never the normalised one. If fewer than
+                    three axes have data the chart declines to draw and says so.
+                </p>
+
+                <h3>6.3 Bars</h3>
+                <p>
+                    Bar panels are plain HTML, not SVG, and come in two flavours.
+                    <code>renderSharePanel(node, entries, formatter)</code> draws a track with an inner fill whose width
+                    is that entry's share of the total, plus the formatted value — used for class time, mode time and
+                    weapon-class kills, where "how much of my total" is the interesting question.
+                    <code>renderModeCompare()</code> instead draws three separate metrics (K/D, win rate, accuracy) per
+                    game mode, each normalised against the best mode, so you can see at a glance that you are a
+                    Breakthrough player who is mediocre at Domination.
+                </p>
+
+                <h3>6.4 Scatter</h3>
+                <p>
+                    <code>renderWeaponScatter()</code> plots one dot per weapon: <strong>x = kills</strong>,
+                    <strong>y = accuracy</strong>, and the radius encodes a third dimension — shots fired — as
+                    <code>3 + 7 × √(shotsFired / maxShots)</code>. Square root, not linear, because area should grow with
+                    the value; a linear radius would make well-used weapons look absurdly large. Both axes scale to the
+                    player's own maximum, and weapons with no kills, no shots or zero accuracy are dropped, as are
+                    players with fewer than two usable weapons.
+                </p>
+
+                <h3>6.5 Lines</h3>
+                <p>
+                    Two line charts, and it matters which is which. The <strong>activity chart</strong> comes from
+                    <code>/bf6/statusarray/</code> and is genuinely live: hourly counts of players in the game across the
+                    last week, shared by everyone. The <strong>tracked progress chart</strong> comes from your own
+                    <code>bf6.snapshots.v1</code> store and is a line of your K/D, accuracy, win rate or kills/min (chosen
+                    with the toggle above the chart) recorded each time you run a lookup.
+                </p>
+                <div class="wiki-note">
+                    <strong>There is no match history.</strong> The API exposes no per-match list —
+                    <code>/bf6/history/</code> and <code>/bf6/battlelog/</code> return 404 — so the trend chart cannot
+                    show your last thirty games. It starts at your first visit to this dashboard and only ever contains
+                    lookups made from this browser. The panel says so rather than implying it is a historical record.
+                </div>
+            </section>
+
+            <p class="wiki-top"><a href="#contents">↑ Contents</a></p>
+
+            <section id="conventions">
+                <h2>7. Conventions and gotchas</h2>
+                <ul class="wiki-list">
+                    <li><strong>No images, ever.</strong> There is not one <code>&lt;img&gt;</code> tag in the repo — no game artwork to infringe, nothing to compress, nothing to lazy-load. Anything that looks like a graphic is CSS or inline SVG.</li>
+                    <li><strong><code>vector-effect: non-scaling-stroke</code></strong> goes on every SVG line and polygon. Without it, strokes scale with the <code>viewBox</code> and hairlines become fat ropes on wide panels.</li>
+                    <li><strong>Empty states are the default path.</strong> Never render a bare <code>0</code> or <code>null</code>; show a <code>div.bf-muted</code> sentence explaining what is missing.</li>
+                    <li><strong>Names are exact and case-sensitive.</strong> The API does not fuzzy-match, which is why the label says "exact match" and recent/saved chips exist at all.</li>
+                    <li><strong>API quirks are mirrored, not corrected</strong> — the request parameter is <code>seperation=</code> (one <em>p</em>), and the profile fields really are spelled <code>devidedDamage</code> and <code>devidedAssists</code>. "Fixing" either silently breaks the panel.</li>
+                    <li><strong><code>XP</code> is an array</strong> with a single interesting element, so it is read as <code>d.XP[0]</code>.</li>
+                    <li><strong>Charts refuse, they don't guess.</strong> The radar needs three axes, the scatter needs two weapons; below that they render a sentence instead of a misleading shape.</li>
+                </ul>
+
+                <h3>7.1 Adding a panel</h3>
+                <ol class="wiki-list">
+                    <li>Add the markup in <code>bf6.html</code>: <code>.bf-panel</code> with a <code>.bf-panel-head</code> and an empty <code>.bf-panel-body</code> carrying a unique id.</li>
+                    <li>If it needs new data, extend <code>normaliseStats()</code> or <code>normaliseProfile()</code> — never read raw API fields inside a render function.</li>
+                    <li>Write the <code>render*()</code> function: clear the node, handle the empty case first, then fill.</li>
+                    <li>Call it from <code>loadPlayer()</code>, so it runs on every lookup.</li>
+                    <li>Add styles to <code>bf6.css</code> using the existing <code>--bf-*</code> variables.</li>
+                    <li>Cross-check: every <code>getElementById</code> target exists in the HTML, and every new class has a rule.</li>
+                </ol>
+            </section>
+
+            <p class="wiki-top"><a href="#contents">↑ Contents</a></p>
+
+            <section id="local">
+                <h2>8. Running locally</h2>
+                <p>Serve the repository root over HTTP rather than opening files directly:</p>
+<pre class="wiki-pre">cd d:\Dokumente\Github_Repro\test_env
+python -m http.server 8500
+# then open http://localhost:8500/bf6.html</pre>
+                <p>
+                    A <code>file://</code> origin is treated as opaque by browsers, so <code>fetch()</code> to the API and
+                    same-origin requests behave inconsistently. Any static server works — <code>python -m http.server</code>,
+                    VS Code's Live Server, <code>npx serve</code>.
+                </p>
+                <p>
+                    Published site: <a href="https://schobbe.github.io/test_env/">schobbe.github.io/test_env</a>, built by
+                    GitHub Pages from the <code>main</code> branch root. Pushing to <code>main</code> is the entire deploy step.
+                </p>
+            </section>
+
+            <p class="wiki-top"><a href="#contents">↑ Contents</a></p>
+        </div>
+    </main>
+
+    <footer>
+        <div class="container">
+            <p>&copy; 2026 My Website. Powered by GitHub Pages.</p>
+        </div>
+    </footer>
+</body>
+</html>

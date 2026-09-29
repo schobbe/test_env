@@ -10,6 +10,7 @@ This is a simple rep. to test some things
 | `index.html` | Landing page with the counter demo and links to the projects |
 | `map.html` | **World Explorer** — zoomable interactive world map with real-time weather (Open-Meteo), a live rain radar overlay (RainViewer) and a portal-independent dark dashboard sidebar |
 | `bf6.html` | **BF6 Player Stats** — look up any Battlefield 6 player by name and platform |
+| `wiki.html` | **Site Wiki** — how the repo is structured, the lookup/caching workflows, and what every chart on the BF6 dashboard means |
 | `Hello_World.py` | First Python script in this repo |
 
 ### BF6 Player Stats (`bf6.html`)
