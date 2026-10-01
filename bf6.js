@@ -1363,14 +1363,21 @@ function renderModeCompare(stats) {
        instead of letting the bars read as lifetime per-mode figures. */
     const covered = modes.reduce((s, m) => s + m.matches, 0);
     const career = toNum(stats.core.matchesPlayed);
-    if (career > 0 && covered < career) {
+
+    /* Always state the coverage, partial or complete. Staying silent when the
+       numbers looked plausible is exactly what made this panel read as a
+       lifetime per-mode breakdown when it is not one. */
+    if (career > 0) {
         node.appendChild(el('div', {
             class: 'bf-muted',
             style: 'margin-top:10px;',
-            text: 'Partial API sample: these ' + fmtInt(covered) + ' of ' + fmtInt(career)
-                + ' career matches (' + Math.round((covered / career) * 100) + '%) are all the API reports per mode. '
-                + 'Modes it does not report are missing entirely, so read these bars as a subset, not lifetime totals. '
-                + 'The Maps and Weapons panels, by contrast, cover every match.'
+            text: covered < career
+                ? 'Partial API sample: these ' + fmtInt(covered) + ' of ' + fmtInt(career)
+                    + ' career matches (' + Math.round((covered / career) * 100)
+                    + '%) are all the API reports per mode. Any mode it does not list is missing entirely, '
+                    + 'so read these bars as a subset rather than as lifetime per-mode totals. '
+                    + 'The Maps, Weapons and Team Play panels, by contrast, cover every match.'
+                : 'Covers all ' + fmtInt(career) + ' career matches, so these per-mode bars are complete.'
         }));
     }
 }
@@ -1381,6 +1388,7 @@ function renderModeCompare(stats) {
 
 function renderMapPerformance(stats) {
     const node = $('bfMapPerf');
+    if (!node) return;
     clear(node);
 
     const rows = (stats.maps || []).filter((m) => toNum(m.matches) > 0);
@@ -1401,12 +1409,17 @@ function renderMapPerformance(stats) {
 }
 
 function renderAimStyle(stats) {
+    const svg = $('bfAimDonutSvg');
+    const legend = $('bfAimDonutLegend');
+    const node = $('bfKillContext');
+    if (!svg || !legend || !node) return;
+
     const dk = stats.dividedKills || {};
     const ads = numOf(dk, 'ads');
     const hip = numOf(dk, 'hipfire');
 
     renderDonut(
-        $('bfAimDonutSvg'), $('bfAimDonutLegend'),
+        svg, legend,
         [
             { label: 'Aimed down sights', value: ads, color: CHART_COLORS[0] },
             { label: 'Hipfire', value: hip, color: CHART_COLORS[2] }
@@ -1415,7 +1428,6 @@ function renderAimStyle(stats) {
         'weapon kills'
     );
 
-    const node = $('bfKillContext');
     clear(node);
     const total = toNum(stats.core.kills);
     const parts = [
@@ -1440,8 +1452,10 @@ function renderAimStyle(stats) {
 }
 
 function renderTeamPlay(stats) {
+    const node = $('bfTeamPlay');
+    if (!node) return;
     const c = stats.core;
-    renderSharePanel($('bfTeamPlay'), [
+    renderSharePanel(node, [
         { label: 'Revives', value: c.revives },
         { label: 'Heals', value: c.heals },
         { label: 'Resupplies', value: c.resupplies },
@@ -1453,6 +1467,7 @@ function renderTeamPlay(stats) {
 
 function renderObjectivePlay(stats) {
     const node = $('bfObjective');
+    if (!node) return;
     clear(node);
 
     const o = stats.objective || {};
@@ -1485,6 +1500,7 @@ function renderObjectivePlay(stats) {
         }));
     }
 }
+
 /* ------------------------------ DIAGRAMS ------------------------------- */
 
 const CHART_COLORS = ['#818cf8', '#38bdf8', '#f59e0b', '#34d399', '#f472b6', '#a78bfa',

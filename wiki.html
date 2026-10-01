@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Site Wiki — test_env</title>
-    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="style.css?v=2">
 </head>
 <body class="wiki-page">
     <header>
@@ -423,6 +423,7 @@
                     <li><strong>Charts refuse, they don't guess.</strong> The radar needs three axes, the scatter needs two weapons; below that they render a sentence instead of a misleading shape.</li>
                     <li><strong>Every chart carries an "i" badge.</strong> A <code>span.bf-info</code> in the <code>.bf-panel-head</code> explains the figure in one sentence through its <code>title</code> attribute. Native tooltips are deliberate: <code>.bf-panel</code> sets <code>overflow: hidden</code>, which would clip a CSS-positioned tooltip.</li>
                     <li><strong><code>perGamemode</code> is a partial sample.</strong> It only appears when <code>seperation=true</code> is sent, and its per-mode totals do not add up to the career totals. On a test account it covered 78 of 147 matches and omitted three modes the player had played. Anything drawn from it must say so out loud. By contrast <code>maps</code>, <code>weapons</code> and the core counters do reconcile, so those can be presented as complete.</li>
+                    <li><strong>Bump the asset version on every deploy.</strong> The stylesheets and scripts are referenced with a <code>?v=</code> query string because GitHub Pages serves every file with <code>Cache-Control: max-age=600</code>. Without the bump a returning visitor can keep an old script for ten minutes while the new markup has already arrived, which is how panels silently end up empty. Raise the number in every page that references a file you changed. As a second line of defence every render function returns early when its node is absent, so a stale document degrades to a missing panel rather than a blank one.</li>
                 </ul>
 
                 <h3>7.1 Adding a panel</h3>
