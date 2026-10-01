@@ -181,6 +181,43 @@
                 </div>
             </div>
 
+            <!-- Playstyle, support and objective breakdowns -->
+            <div class="bf-chart-grid">
+                <div class="bf-panel">
+                    <div class="bf-panel-head">
+                        <h2>🗺 Map Win Rate <span class="bf-info" tabindex="0" title="Win rate on each map, best first. Bar length is the win rate and the label shows matches played.">i</span></h2>
+                        <span class="bf-count">best win rate first</span>
+                    </div>
+                    <div class="bf-panel-body" id="bfMapPerf"></div>
+                </div>
+
+                <div class="bf-panel">
+                    <div class="bf-panel-head">
+                        <h2>🎯 Aim and Kill Style <span class="bf-info" tabindex="0" title="How your weapon kills split between aiming down sights and hipfire, then the context your other kills came from.">i</span></h2>
+                    </div>
+                    <div class="bf-panel-body">
+                        <div class="bf-chart-figure">
+                            <svg class="bf-donut-svg" id="bfAimDonutSvg"></svg>
+                        </div>
+                        <div class="bf-chart-legend" id="bfAimDonutLegend"></div>
+                        <div id="bfKillContext" style="margin-top:14px;"></div>
+                    </div>
+                </div>
+
+                <div class="bf-panel">
+                    <div class="bf-panel-head">
+                        <h2>🤝 Team Play <span class="bf-info" tabindex="0" title="Support actions you performed for your squad and team, largest first.">i</span></h2>
+                    </div>
+                    <div class="bf-panel-body" id="bfTeamPlay"></div>
+                </div>
+
+                <div class="bf-panel">
+                    <div class="bf-panel-head">
+                        <h2>🏁 Objective Play <span class="bf-info" tabindex="0" title="Objective actions you completed, plus the time you spent defending versus attacking objectives.">i</span></h2>
+                    </div>
+                    <div class="bf-panel-body" id="bfObjective"></div>
+                </div>
+            </div>
             <!-- Tracked progress (client-side snapshots) -->
             <div class="bf-panel">
                 <div class="bf-panel-head">

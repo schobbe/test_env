@@ -1339,7 +1339,7 @@ function renderModeCompare(stats) {
     clear(node);
     const modes = collectModes(stats.perGamemode);
     const count = $('bfModeCompareCount');
-    if (count) count.textContent = modes.length ? modes.length + ' modes' : '';
+    if (count) count.textContent = modes.length ? modes.length + ' modes reported' : '';
 
     if (!modes.length) {
         node.appendChild(el('div', { class: 'bf-muted', text: 'No per-mode breakdown available for this player.' }));
@@ -1357,8 +1357,134 @@ function renderModeCompare(stats) {
         node.appendChild(barRow('Win rate', m.winPercent, 100, fmtPct(m.winPercent), 'good'));
         node.appendChild(barRow('Accuracy', m.accuracy, 100, fmtPct(m.accuracy), 'warm'));
     });
+
+    /* The API perGamemode block is only a partial sample: it drops modes the
+       player has played and its totals never reach the career totals. Say so
+       instead of letting the bars read as lifetime per-mode figures. */
+    const covered = modes.reduce((s, m) => s + m.matches, 0);
+    const career = toNum(stats.core.matchesPlayed);
+    if (career > 0 && covered < career) {
+        node.appendChild(el('div', {
+            class: 'bf-muted',
+            style: 'margin-top:10px;',
+            text: 'Partial API sample: these ' + fmtInt(covered) + ' of ' + fmtInt(career)
+                + ' career matches (' + Math.round((covered / career) * 100) + '%) are all the API reports per mode. '
+                + 'Modes it does not report are missing entirely, so read these bars as a subset, not lifetime totals. '
+                + 'The Maps and Weapons panels, by contrast, cover every match.'
+        }));
+    }
 }
 
+/* --------------------- MAPS / PLAYSTYLE / SUPPORT ---------------------- */
+/* Three views the career table only ever showed as bare numbers. All three
+   read fields that reconcile with the career totals, unlike perGamemode. */
+
+function renderMapPerformance(stats) {
+    const node = $('bfMapPerf');
+    clear(node);
+
+    const rows = (stats.maps || []).filter((m) => toNum(m.matches) > 0);
+    if (!rows.length) {
+        node.appendChild(el('div', { class: 'bf-muted', text: 'No per-map data recorded for this player yet.' }));
+        return;
+    }
+
+    rows.slice()
+        .sort((a, b) => toNum(b.winPercent) - toNum(a.winPercent))
+        .forEach((m) => node.appendChild(barRow(
+            labelOf(m, 'mapName'),
+            toNum(m.winPercent),
+            100,
+            fmtPct(m.winPercent) + ' \u00b7 ' + fmtInt(m.matches) + ' played',
+            toNum(m.winPercent) >= 50 ? 'good' : 'warm'
+        )));
+}
+
+function renderAimStyle(stats) {
+    const dk = stats.dividedKills || {};
+    const ads = numOf(dk, 'ads');
+    const hip = numOf(dk, 'hipfire');
+
+    renderDonut(
+        $('bfAimDonutSvg'), $('bfAimDonutLegend'),
+        [
+            { label: 'Aimed down sights', value: ads, color: CHART_COLORS[0] },
+            { label: 'Hipfire', value: hip, color: CHART_COLORS[2] }
+        ],
+        fmtCompact(ads + hip),
+        'weapon kills'
+    );
+
+    const node = $('bfKillContext');
+    clear(node);
+    const total = toNum(stats.core.kills);
+    const parts = [
+        { label: 'Long-range kills', value: numOf(dk, 'longDistance') },
+        { label: 'Grenade kills', value: numOf(dk, 'grenades') },
+        { label: 'Vehicle kills', value: numOf(dk, 'vehicle') },
+        { label: 'Passenger kills', value: numOf(dk, 'passenger') },
+        { label: 'Melee kills', value: numOf(dk, 'melee') }
+    ].filter((x) => toNum(x.value) > 0);
+
+    if (!parts.length) return;
+
+    node.appendChild(el('div', {
+        class: 'bf-muted',
+        text: 'Kill contexts, as a share of all ' + fmtInt(total) + ' career kills:'
+    }));
+    const max = parts.reduce((m, x) => Math.max(m, toNum(x.value)), 0);
+    parts.sort((a, b) => toNum(b.value) - toNum(a.value)).forEach((x) => node.appendChild(barRow(
+        x.label, x.value, max,
+        fmtInt(x.value) + ' \u00b7 ' + (total > 0 ? ((toNum(x.value) / total) * 100).toFixed(1) : '0.0') + '%'
+    )));
+}
+
+function renderTeamPlay(stats) {
+    const c = stats.core;
+    renderSharePanel($('bfTeamPlay'), [
+        { label: 'Revives', value: c.revives },
+        { label: 'Heals', value: c.heals },
+        { label: 'Resupplies', value: c.resupplies },
+        { label: 'Repairs', value: c.repairs },
+        { label: 'Enemies spotted', value: c.enemiesSpotted },
+        { label: 'Kill assists', value: c.killAssists }
+    ], fmtInt);
+}
+
+function renderObjectivePlay(stats) {
+    const node = $('bfObjective');
+    clear(node);
+
+    const o = stats.objective || {};
+    const time = o.time || {};
+    const totalTime = numOf(time, 'total');
+
+    const counts = [
+        { label: 'Flags captured', value: numOf(o, 'captured') },
+        { label: 'Flags neutralised', value: numOf(o, 'neutralized') },
+        { label: 'Sectors captured', value: numOf(stats.sector, 'captured') },
+        { label: 'Sectors armed', value: numOf(o, 'armed') }
+    ].filter((x) => toNum(x.value) > 0);
+
+    if (!counts.length && totalTime <= 0) {
+        node.appendChild(el('div', { class: 'bf-muted', text: 'No objective actions recorded for this player yet.' }));
+        return;
+    }
+
+    const max = counts.reduce((m, x) => Math.max(m, toNum(x.value)), 0);
+    counts.sort((a, b) => toNum(b.value) - toNum(a.value)).forEach((x) =>
+        node.appendChild(barRow(x.label, x.value, max, fmtInt(x.value))));
+
+    if (totalTime > 0) {
+        node.appendChild(el('div', {
+            class: 'bf-muted',
+            style: 'margin-top:10px;',
+            text: 'Objective time: ' + fmtDuration(numOf(time, 'defended')) + ' defending, '
+                + fmtDuration(numOf(time, 'attacked')) + ' attacking, out of '
+                + fmtDuration(totalTime) + ' on objectives.'
+        }));
+    }
+}
 /* ------------------------------ DIAGRAMS ------------------------------- */
 
 const CHART_COLORS = ['#818cf8', '#38bdf8', '#f59e0b', '#34d399', '#f472b6', '#a78bfa',
@@ -2416,6 +2542,10 @@ async function loadPlayer(name, platform) {
         renderWeaponClassKills(profile);
         renderModeCompare(stats);
         renderWeaponScatter(stats);
+        renderMapPerformance(stats);
+        renderAimStyle(stats);
+        renderTeamPlay(stats);
+        renderObjectivePlay(stats);
         recordSnapshot(stats, platform);
         renderTrend(stats);
         renderSessionLog(stats);
