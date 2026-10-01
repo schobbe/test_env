@@ -8,7 +8,7 @@
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
           integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
           crossorigin=""/>
-    <link rel="stylesheet" href="style.css?v=3">
+    <link rel="stylesheet" href="style.css?v=4">
 </head>
 <body class="map-dashboard-page">
     <div class="app-wrapper">
@@ -21,7 +21,6 @@
                         <a href="index.html" class="back-link">← Home</a>
                         <a href="bf6.html" class="back-link">BF6 Stats</a>
                         <a href="wiki.html" class="back-link">Wiki</a>
-                        <a href="#" class="back-link chan-toggle" id="channelToggle" hidden>Beta</a>
                     </span>
                 </div>
                 <div class="sidebar-subtitle">Interactive Map & Real-Time Weather</div>
@@ -134,22 +133,5 @@
             integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
             crossorigin=""></script>
     <script src="map.js?v=2"></script>
-    <script>
-        /* Stable <-> beta channel toggle. Every link in this site is relative,
-           so the same page exists one directory up (stable) or one down (beta)
-           and switching channel keeps you on the page you are reading. */
-        (function () {
-            var a = document.getElementById('channelToggle');
-            if (!a) return;
-            var onBeta = /\/beta(\/|$)/.test(window.location.pathname);
-            var page = window.location.pathname.split('/').pop() || 'index.html';
-            a.href = onBeta ? ('../' + page) : ('beta/' + page);
-            a.textContent = onBeta ? 'Stable' : 'Beta';
-            a.title = onBeta
-                ? 'On the beta preview — switch to the stable site'
-                : 'Switch to the beta preview of this site';
-            a.hidden = false;
-        }());
-    </script>
 </body>
 </html>

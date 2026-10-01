@@ -75,6 +75,13 @@ jobs:
         with:
           path: site
 
+  # Requires Settings > Pages > Source to be "GitHub Actions".
+  #
+  # While Pages is still set to "Deploy from a branch", GitHub refuses any
+  # deployment originating from a different branch, and it refuses it BEFORE the
+  # job starts: this job reports "failure" with an empty steps array and no
+  # runner, while build sits there green. A run pushed from main still succeeds
+  # in the meantime, so the symptom looks intermittent rather than systematic.
   deploy:
     needs: build
     runs-on: ubuntu-latest

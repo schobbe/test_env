@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Site Wiki — test_env</title>
-    <link rel="stylesheet" href="style.css?v=3">
+    <link rel="stylesheet" href="style.css?v=4">
 </head>
 <body class="wiki-page">
     <header>
@@ -16,7 +16,6 @@
                     <li><a href="map.html">Interactive Map</a></li>
                     <li><a href="bf6.html">BF6 Stats</a></li>
                     <li><a href="wiki.html" class="active">Wiki</a></li>
-                    <li><a href="#" class="chan-toggle" id="channelToggle" hidden>Beta</a></li>
                 </ul>
             </div>
         </nav>
@@ -536,8 +535,11 @@ python -m http.server 8500
 
                 <h3>8.1 Branches and the beta preview</h3>
                 <p>
-                    The nav carries an amber pill that moves between the stable site and the beta one without
-                    leaving the page you are reading. Three branches sit behind it:
+                    A switch in the nav of the BF6 dashboard moves between the stable site and the beta one
+                    without leaving the page you are reading. It sits on that page alone on purpose:
+                    <code>index.html</code>, <code>map.html</code> and this wiki are byte-identical in both
+                    channels, so a switch on any of them would only reload the page you are already on.
+                    Three branches sit behind it:
                 </p>
                 <table class="wiki-table">
                     <thead><tr><th>Branch</th><th>Live at</th><th>Role</th></tr></thead>
@@ -550,7 +552,7 @@ python -m http.server 8500
                         <tr>
                             <td><code>beta</code></td>
                             <td><code>/beta/</code></td>
-                            <td>Candidate builds, reached through the toggle. The last place something is looked at before it reaches the public site.</td>
+                            <td>Candidate builds, reached through the switch on the BF6 page. The last place something is looked at before it reaches the public site.</td>
                         </tr>
                         <tr>
                             <td><code>dev</code></td>
@@ -575,15 +577,32 @@ python -m http.server 8500
                     This only works because <strong>every link in the site is relative</strong>. There is no
                     <code>url(/…)</code> in the CSS, no <code>href="/…"</code>, no ES-module import and no
                     <code>location.pathname</code> used for assets anywhere in the repository, so the identical files
-                    work unchanged when served from a subdirectory. The toggle derives its own target from the path:
-                    under <code>/beta/</code> it points up to <code>../…</code>, anywhere else it points down to
-                    <code>beta/…</code>.
+                    work unchanged when served from a subdirectory. The switch derives its own target from the path:
+                    turned on under <code>/beta/</code> it points up to <code>../…</code>, anywhere else it points
+                    down to <code>beta/…</code>.
                 </p>
                 <p>
-                    <strong>Deploying by hand.</strong> Settings → Pages is set to <em>GitHub Actions</em>. Pushing to
-                    <code>main</code> or <code>beta</code> deploys automatically, and the workflow also carries a
-                    manual <em>Run workflow</em> trigger — the quickest way to force a redeploy without committing
-                    anything.
+                    The switch is a real <code>&lt;input type="checkbox"&gt;</code> inside a <code>&lt;label&gt;</code>,
+                    so it is keyboard operable and announced correctly with no ARIA. Its state reflects the channel
+                    you are actually on rather than the one you would move to. A single URL can only ever serve one
+                    build, so flipping it navigates instead of swapping content in place — and it starts
+                    <code>hidden</code> so that without JavaScript it never appears rather than linking somewhere
+                    wrong.
+                </p>
+                <p>
+                    <strong>Deploying by hand.</strong> Settings → Pages must be set to <em>GitHub Actions</em>.
+                    Pushing to <code>main</code> or <code>beta</code> deploys automatically, and the workflow also
+                    carries a manual <em>Run workflow</em> trigger — the quickest way to force a redeploy without
+                    committing anything.
+                </p>
+                <p>
+                    <strong>What "deploy rejected" looks like.</strong> That setting is not a formality. While Pages
+                    is still pointed at a source branch, GitHub refuses any deployment originating from a different
+                    one, and it refuses it <em>before the job starts</em>: the <code>deploy</code> job reports
+                    <code>failure</code> with an empty <code>steps</code> array and no runner, while <code>build</code>
+                    sits there green. Nothing in the workflow is wrong; the fix is the setting. A run pushed from
+                    <code>main</code> will pass in the meantime, which makes the failure look intermittent rather
+                    than systematic.
                 </p>
             </section>
 
@@ -596,22 +615,5 @@ python -m http.server 8500
             <p>&copy; 2026 My Website. Powered by GitHub Pages.</p>
         </div>
     </footer>
-    <script>
-        /* Stable <-> beta channel toggle. Every link in this site is relative,
-           so the same page exists one directory up (stable) or one down (beta)
-           and switching channel keeps you on the page you are reading. */
-        (function () {
-            var a = document.getElementById('channelToggle');
-            if (!a) return;
-            var onBeta = /\/beta(\/|$)/.test(window.location.pathname);
-            var page = window.location.pathname.split('/').pop() || 'index.html';
-            a.href = onBeta ? ('../' + page) : ('beta/' + page);
-            a.textContent = onBeta ? 'Stable' : 'Beta';
-            a.title = onBeta
-                ? 'On the beta preview — switch to the stable site'
-                : 'Switch to the beta preview of this site';
-            a.hidden = false;
-        }());
-    </script>
 </body>
 </html>

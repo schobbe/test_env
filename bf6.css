@@ -104,26 +104,77 @@ body.bf6-page {
     border-color: var(--bf-accent-strong);
 }
 
-/* Stable <-> beta channel switch. Deliberately amber so it never reads as an
-   ordinary nav item: it changes which site you are on, not which page. */
-.bf-navlinks a.chan-toggle,
-a.chan-toggle {
-    color: #fbbf24;
-    background: rgba(251, 191, 36, 0.10);
-    border: 1px solid rgba(251, 191, 36, 0.45);
+/* Stable <-> beta channel switch. Mirrors the .switch component style.css
+   already defines, rebuilt on the --bf-* tokens so this page does not have to
+   pull in a second design system. The checkbox stays in the markup and stays
+   focusable, so the switch is keyboard operable and announced correctly with
+   no ARIA at all. */
+.bf-switch {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    margin-left: 6px;
+    cursor: pointer;
+    user-select: none;
+}
+
+.bf-switch input {
+    position: absolute;
+    opacity: 0;
+    width: 0;
+    height: 0;
+}
+
+.bf-switch-track {
+    position: relative;
+    display: inline-block;
+    flex: none;
+    width: 40px;
+    height: 22px;
     border-radius: 999px;
-    font-weight: 700;
-    letter-spacing: 0.03em;
+    background: var(--bf-bg);
+    border: 1px solid var(--bf-border);
+    transition: background 0.2s, border-color 0.2s;
 }
 
-.bf-navlinks a.chan-toggle:hover,
-a.chan-toggle:hover {
-    color: #fde68a;
+.bf-switch-knob {
+    position: absolute;
+    top: 2px;
+    left: 2px;
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    background: var(--bf-muted);
+    transition: transform 0.2s, background 0.2s;
+}
+
+.bf-switch input:checked + .bf-switch-track {
     background: rgba(251, 191, 36, 0.20);
-    border-color: rgba(251, 191, 36, 0.75);
+    border-color: rgba(251, 191, 36, 0.65);
 }
 
-a.chan-toggle[hidden] {
+.bf-switch input:checked + .bf-switch-track .bf-switch-knob {
+    transform: translateX(18px);
+    background: #fbbf24;
+}
+
+/* Keyboard focus has to be visible even though the real checkbox is invisible. */
+.bf-switch input:focus-visible + .bf-switch-track {
+    box-shadow: 0 0 0 3px rgba(251, 191, 36, 0.28);
+}
+
+.bf-switch-text {
+    font-size: 0.85em;
+    font-weight: 600;
+    color: var(--bf-muted);
+    transition: color 0.2s;
+}
+
+.bf-switch input:checked ~ .bf-switch-text {
+    color: #fbbf24;
+}
+
+.bf-switch[hidden] {
     display: none;
 }
 
