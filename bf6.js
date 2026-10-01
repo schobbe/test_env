@@ -1724,7 +1724,16 @@ function buildSnapshot(stats) {
         winPercent: c.winPercent,
         killsPerMinute: c.killsPerMinute,
         matchesPlayed: c.matchesPlayed,
-        secondsPlayed: c.secondsPlayed
+        secondsPlayed: c.secondsPlayed,
+        /* Cumulative counters are stored next to the ratios so two snapshots
+           can be differenced into a real session (see sessionDeltas). A ratio
+           like accuracy or winPercent cannot be subtracted - only the
+           counters behind it can. */
+        wins: c.wins,
+        loses: c.loses,
+        shotsFired: c.shotsFired,
+        shotsHit: c.shotsHit,
+        damage: c.damage
     };
 }
 
@@ -1893,6 +1902,153 @@ function renderTrend(stats) {
     });
 }
 
+/* ----------------------------- SESSION LOG ------------------------------ */
+/* There is no per-match data to fetch: /bf6/history/, /bf6/battlelog/ and
+   /manager/sessions/ all 404 for BF6, so the API has no match list at all.
+   Every figure it does return is a lifetime cumulative counter, though, so
+   subtracting an earlier snapshot from a later one yields exactly what was
+   played in between. That difference is the session - and its edges are when
+   you pressed Search, not when the game thought a round ended. */
+
+function sessionDeltas(list) {
+    const rows = [];
+
+    for (let i = 1; i < list.length; i++) {
+        const prev = list[i - 1];
+        const cur = list[i];
+
+        /* Rows written before the counters were stored, or a profile that moved
+           backwards (cleared, or a different account under the same name), make
+           the subtraction meaningless rather than merely imprecise. */
+        if (typeof prev.wins !== 'number' || typeof prev.shotsFired !== 'number') continue;
+
+        const row = {
+            from: toNum(prev.t),
+            to: toNum(cur.t),
+            matches: toNum(cur.matchesPlayed) - toNum(prev.matchesPlayed),
+            kills: toNum(cur.kills) - toNum(prev.kills),
+            deaths: toNum(cur.deaths) - toNum(prev.deaths),
+            wins: toNum(cur.wins) - toNum(prev.wins),
+            loses: toNum(cur.loses) - toNum(prev.loses),
+            shotsFired: toNum(cur.shotsFired) - toNum(prev.shotsFired),
+            shotsHit: toNum(cur.shotsHit) - toNum(prev.shotsHit),
+            score: toNum(cur.score) - toNum(prev.score),
+            seconds: toNum(cur.secondsPlayed) - toNum(prev.secondsPlayed),
+            damage: toNum(cur.damage) - toNum(prev.damage)
+        };
+
+        if (row.kills < 0 || row.deaths < 0 || row.score < 0 || row.seconds < 0) continue;
+
+        const moved = row.matches !== 0 || row.kills !== 0 || row.deaths !== 0
+            || row.score !== 0 || row.seconds !== 0;
+        if (!moved) continue;
+
+        rows.push(row);
+    }
+
+    return rows;
+}
+
+function clockTime(t) {
+    const d = new Date(toNum(t));
+    if (isNaN(d.getTime())) return '';
+    return d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
+}
+
+/* "12 Sep 20:14 -> 12 Sep 22:40", with a real arrow. */
+function sessionWindow(row) {
+    return shortDate(row.from) + ' ' + clockTime(row.from)
+        + ' \u2192 ' + shortDate(row.to) + ' ' + clockTime(row.to);
+}
+
+function fmtSigned(v, digits) {
+    const n = toNum(v);
+    if (!isFinite(n)) return '\u2014';
+    return (n > 0 ? '+' : '') + fmtNum(n, typeof digits === 'number' ? digits : 0);
+}
+
+function renderSessionLog(stats) {
+    const panel = $('bfSessionLogPanel');
+    const head = $('bfSessionLogHead');
+    const body = $('bfSessionLogBody');
+    const summary = $('bfSessionLogSummary');
+    const count = $('bfSessionLogCount');
+    if (!panel || !head || !body) return;
+
+    clear(head);
+    clear(body);
+    if (summary) clear(summary);
+
+    const rows = sessionDeltas(snapshotList(stats.player.name, appState.platform));
+
+    /* One check on its own is not a session - there has to be an earlier one to
+       subtract from. Stay hidden rather than showing an empty table. */
+    if (!rows.length) {
+        panel.style.display = 'none';
+        return;
+    }
+
+    ['Session', 'Window', 'Matches', 'W / L', 'Kills', 'Deaths', 'K/D', 'Accuracy', 'Score', 'Damage', 'Played']
+        .forEach((label) => head.appendChild(el('th', { text: label })));
+
+    /* Newest first, so the session you just finished is the top row. */
+    rows.map((row, i) => ({ row: row, label: 'S' + (i + 1) })).reverse().forEach((entry) => {
+        const row = entry.row;
+        const kd = row.deaths > 0 ? row.kills / row.deaths : NaN;
+        const acc = row.shotsFired > 0 ? (row.shotsHit / row.shotsFired) * 100 : NaN;
+        const wl = (row.wins + row.loses) > 0 ? fmtInt(row.wins) + ' / ' + fmtInt(row.loses) : '\u2014';
+
+        const cells = [
+            entry.label,
+            sessionWindow(row),
+            fmtInt(row.matches),
+            wl,
+            fmtSigned(row.kills),
+            fmtSigned(row.deaths),
+            isFinite(kd) ? fmtNum(kd) : '\u2014',
+            isFinite(acc) ? fmtPct(acc) : '\u2014',
+            fmtSigned(row.score),
+            fmtSigned(row.damage),
+            fmtDuration(Math.max(0, row.seconds))
+        ];
+
+        body.appendChild(el('tr', null, cells.map((value, col) =>
+            el('td', { class: col >= 2 ? 'num' : null, text: String(value) })
+        )));
+    });
+
+    if (count) {
+        count.textContent = rows.length + ' session' + (rows.length === 1 ? '' : 's')
+            + ' \u00b7 this browser only';
+    }
+
+    if (summary) {
+        const latest = rows[rows.length - 1];
+        const kd = latest.deaths > 0 ? latest.kills / latest.deaths : NaN;
+        const acc = latest.shotsFired > 0 ? (latest.shotsHit / latest.shotsFired) * 100 : NaN;
+
+        const bits = [
+            fmtInt(latest.matches) + ' match' + (latest.matches === 1 ? '' : 'es'),
+            fmtSigned(latest.kills) + ' kills / ' + fmtSigned(latest.deaths) + ' deaths',
+            isFinite(kd) ? 'K/D ' + fmtNum(kd) : null,
+            (latest.wins + latest.loses) > 0 ? fmtSigned(latest.wins) + ' W / ' + fmtInt(latest.loses) + ' L' : null,
+            isFinite(acc) ? fmtPct(acc) + ' accuracy' : null,
+            fmtDuration(Math.max(0, latest.seconds)) + ' played'
+        ].filter(Boolean);
+
+        summary.appendChild(el('div', null, [
+            el('strong', { text: 'Since your last check: ' }),
+            document.createTextNode(bits.join(' \u00b7 '))
+        ]));
+        summary.appendChild(el('div', {
+            class: 'bf-muted',
+            text: 'Each row is everything played between two checks of this page, not individual matches. '
+                + 'The API keeps no match history, so nothing from before your first visit can be recovered.'
+        }));
+    }
+
+    panel.style.display = '';
+}
 /* --------------------- SESSION HISTORY (/manager/sessions) --------------- */
 /* Best effort: only populated for players who played on gametools-managed   */
 /* community servers. When empty the whole panel stays hidden.               */
@@ -2262,6 +2418,7 @@ async function loadPlayer(name, platform) {
         renderWeaponScatter(stats);
         recordSnapshot(stats, platform);
         renderTrend(stats);
+        renderSessionLog(stats);
         renderWeapons(stats);
         renderWeaponGroups(stats);
         renderClasses(stats);

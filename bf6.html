@@ -92,7 +92,7 @@
             <div class="bf-chart-grid">
                 <div class="bf-panel">
                     <div class="bf-panel-head">
-                        <h2>🕸️ Performance Profile</h2>
+                        <h2>🕸️ Performance Profile <span class="bf-info" tabindex="0" title="Eight core stats rescaled to your own best, so the shape shows balance rather than raw totals.">i</span></h2>
                         <span class="bf-count">normalised 0-100</span>
                     </div>
                     <div class="bf-panel-body">
@@ -105,7 +105,7 @@
 
                 <div class="bf-panel">
                     <div class="bf-panel-head">
-                        <h2>✨ XP Composition</h2>
+                        <h2>✨ XP Composition <span class="bf-info" tabindex="0" title="Your total XP split into performance and accolade earnings.">i</span></h2>
                     </div>
                     <div class="bf-panel-body">
                         <div class="bf-chart-figure">
@@ -117,7 +117,7 @@
 
                 <div class="bf-panel">
                     <div class="bf-panel-head">
-                        <h2>🎯 Kills by Type</h2>
+                        <h2>🎯 Kills by Type <span class="bf-info" tabindex="0" title="How your kills divide across infantry, vehicles, gadgets and melee.">i</span></h2>
                     </div>
                     <div class="bf-panel-body">
                         <div class="bf-chart-figure">
@@ -131,21 +131,21 @@
             <div class="bf-chart-grid">
                 <div class="bf-panel">
                     <div class="bf-panel-head">
-                        <h2>🎖️ Time per Class</h2>
+                        <h2>🎖️ Time per Class <span class="bf-info" tabindex="0" title="How long you have played as each class.">i</span></h2>
                     </div>
                     <div class="bf-panel-body" id="bfClassTime"></div>
                 </div>
 
                 <div class="bf-panel">
                     <div class="bf-panel-head">
-                        <h2>🕹️ Time per Mode</h2>
+                        <h2>🕹️ Time per Mode <span class="bf-info" tabindex="0" title="How long you have played in each game mode, plus time in vehicles.">i</span></h2>
                     </div>
                     <div class="bf-panel-body" id="bfModeTime"></div>
                 </div>
 
                 <div class="bf-panel">
                     <div class="bf-panel-head">
-                        <h2>🔫 Kills per Weapon Class</h2>
+                        <h2>🔫 Kills per Weapon Class <span class="bf-info" tabindex="0" title="Total kills credited to each weapon class, such as AR, SMG and LMG.">i</span></h2>
                     </div>
                     <div class="bf-panel-body" id="bfWeaponClassKills"></div>
                 </div>
@@ -154,7 +154,7 @@
             <div class="bf-chart-grid">
                 <div class="bf-panel">
                     <div class="bf-panel-head">
-                        <h2>⚖️ Mode Comparison</h2>
+                        <h2>⚖️ Mode Comparison <span class="bf-info" tabindex="0" title="K/D, score and kills side by side for every mode you have played.">i</span></h2>
                         <span class="bf-count" id="bfModeCompareCount"></span>
                     </div>
                     <div class="bf-panel-body" id="bfModeCompare"></div>
@@ -162,7 +162,7 @@
 
                 <div class="bf-panel">
                     <div class="bf-panel-head">
-                        <h2>🎯 Weapon Performance</h2>
+                        <h2>🎯 Weapon Performance <span class="bf-info" tabindex="0" title="Each dot is one weapon: right is more kills, up is better accuracy, and a bigger dot means more shots fired.">i</span></h2>
                         <span class="bf-count">kills vs accuracy</span>
                     </div>
                     <div class="bf-panel-body">
@@ -175,7 +175,7 @@
 
                 <div class="bf-panel">
                     <div class="bf-panel-head">
-                        <h2>💥 Damage &amp; Assist Breakdown</h2>
+                        <h2>💥 Damage &amp; Assist Breakdown <span class="bf-info" tabindex="0" title="Where your damage and assists went - to infantry, to vehicles, or from a vehicle.">i</span></h2>
                     </div>
                     <div class="bf-panel-body" id="bfDamageBreakdown"></div>
                 </div>
@@ -184,7 +184,7 @@
             <!-- Tracked progress (client-side snapshots) -->
             <div class="bf-panel">
                 <div class="bf-panel-head">
-                    <h2>📊 My Tracked Progress</h2>
+                    <h2>📊 My Tracked Progress <span class="bf-info" tabindex="0" title="Your own K/D, accuracy, win rate or kills per minute, recorded each time you run a lookup in this browser.">i</span></h2>
                     <div class="bf-chart-head">
                         <div class="bf-toggle-group" id="bfTrendMetric">
                             <button type="button" data-metric="kd" class="active">K/D</button>
@@ -200,6 +200,24 @@
                 <div class="bf-chart-legend" id="bfTrendLegend"></div>
             </div>
 
+            <!-- Sessions built from local snapshot deltas (the API has no match list) -->
+            <div class="bf-panel" id="bfSessionLogPanel" style="display:none;">
+                <div class="bf-panel-head">
+                    <h2>🗓 My Sessions <span class="bf-info" tabindex="0" title="Each row is everything you played between two checks of this page, taken from your local snapshots.">i</span></h2>
+                    <span class="bf-count" id="bfSessionLogCount"></span>
+                </div>
+                <div class="bf-panel-body flush">
+                    <div class="bf-table-wrap">
+                        <table class="bf-table">
+                            <thead>
+                                <tr id="bfSessionLogHead"></tr>
+                            </thead>
+                            <tbody id="bfSessionLogBody"></tbody>
+                        </table>
+                    </div>
+                </div>
+                <div class="bf-panel-body" id="bfSessionLogSummary"></div>
+            </div>
             <!-- Weapons -->
             <div class="bf-panel">
                 <div class="bf-panel-head">
@@ -319,7 +337,7 @@
             <!-- Live activity chart -->
             <div class="bf-panel">
                 <div class="bf-panel-head">
-                    <h2>📈 Live BF6 Activity</h2>
+                    <h2>📈 Live BF6 Activity <span class="bf-info" tabindex="0" title="How many players were in BF6 each hour over the last week. Live shared data, not your own play.">i</span></h2>
                     <div class="bf-chart-head">
                         <div class="bf-toggle-group" id="bfActivityRange">
                             <button type="button" data-days="1">24 h</button>

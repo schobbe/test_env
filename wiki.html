@@ -265,7 +265,7 @@
                         <tr><td><code>&lt;request URL&gt;</code></td><td>pruned to the newest entries</td><td>Raw API responses plus their fetch time</td><td>TTL expiry (10 min)</td></tr>
                         <tr><td><code>bf6.recent.v1</code></td><td>6 entries</td><td>The last lookups, newest first, as the chips under the search box</td><td><em>Clear</em> link, or overflow</td></tr>
                         <tr><td><code>bf6.saved.v1</code></td><td>12 entries</td><td>Names you pinned with the Save button. Saving the same name on another platform moves the entry instead of duplicating it.</td><td>Clicking a chip's ×, or the <em>Clear</em> link</td></tr>
-                        <tr><td><code>bf6.snapshots.v1</code></td><td>60 rows</td><td>One row per lookup: time, name, platform, K/D, win rate, accuracy, kills, deaths, score. Feeds the trend chart.</td><td>Overflow (oldest dropped)</td></tr>
+                        <tr><td><code>bf6.snapshots.v1</code></td><td>60 rows per player</td><td>One row per lookup: the ratios (K/D, win rate, accuracy, kills/min) <em>and</em> the raw counters behind them (kills, deaths, wins, loses, matches, shots, damage, score, seconds). Feeds the trend chart <em>and</em> the session log. A ratio cannot be subtracted, only the counters can.</td><td>Overflow (oldest dropped)</td></tr>
                     </tbody>
                 </table>
                 <div class="wiki-note">
@@ -318,6 +318,7 @@
                         <tr><td>Damage attribution</td><td><code>renderDamageBreakdown</code></td><td><code>bfDamageBreakdown</code></td><td><code>devidedDamage</code> / <code>devidedAssists</code> — the API's own spelling</td></tr>
                         <tr><td>Live player activity (line)</td><td><code>renderActivityChart</code></td><td><code>bfActivitySvg</code></td><td><code>/bf6/statusarray/</code>, hourly counts across a week</td></tr>
                         <tr><td>My tracked progress (line)</td><td><code>renderTrend</code></td><td><code>bfTrendSvg</code></td><td>Your own <code>bf6.snapshots.v1</code> rows — not API data</td></tr>
+                        <tr><td>My sessions (table)</td><td><code>renderSessionLog</code></td><td><code>bfSessionLogBody</code></td><td>Deltas between successive <code>bf6.snapshots.v1</code> rows. No API endpoint can supply this, it is computed locally.</td></tr>
                     </tbody>
                 </table>
                 <h3>6.1 Donuts</h3>
@@ -397,10 +398,10 @@
                     with the toggle above the chart) recorded each time you run a lookup.
                 </p>
                 <div class="wiki-note">
-                    <strong>There is no match history.</strong> The API exposes no per-match list —
-                    <code>/bf6/history/</code> and <code>/bf6/battlelog/</code> return 404 — so the trend chart cannot
-                    show your last thirty games. It starts at your first visit to this dashboard and only ever contains
-                    lookups made from this browser. The panel says so rather than implying it is a historical record.
+                    <strong>There is no match history anywhere.</strong> The API exposes no per-match list —
+                    <code>/bf6/history/</code>, <code>/bf6/battlelog/</code> and <code>/manager/sessions/</code> all return 404 — so the trend chart cannot
+                    show your last thirty games. What <em>is</em> derivable is a difference of totals: every figure the API returns is a lifetime cumulative counter, so subtracting one snapshot from the next gives exactly what was played in between. That is what the <strong>session log</strong> (<code>renderSessionLog</code>) does. Both the trend chart and the session log start at your first visit to this dashboard and only ever contain
+                    lookups made from this browser. Their edges are when you pressed Search, not when the game thought a round ended.
                 </div>
             </section>
 
@@ -416,6 +417,7 @@
                     <li><strong>API quirks are mirrored, not corrected</strong> — the request parameter is <code>seperation=</code> (one <em>p</em>), and the profile fields really are spelled <code>devidedDamage</code> and <code>devidedAssists</code>. "Fixing" either silently breaks the panel.</li>
                     <li><strong><code>XP</code> is an array</strong> with a single interesting element, so it is read as <code>d.XP[0]</code>.</li>
                     <li><strong>Charts refuse, they don't guess.</strong> The radar needs three axes, the scatter needs two weapons; below that they render a sentence instead of a misleading shape.</li>
+                    <li><strong>Every chart carries an "i" badge.</strong> A <code>span.bf-info</code> in the <code>.bf-panel-head</code> explains the figure in one sentence through its <code>title</code> attribute. Native tooltips are deliberate: <code>.bf-panel</code> sets <code>overflow: hidden</code>, which would clip a CSS-positioned tooltip.</li>
                 </ul>
 
                 <h3>7.1 Adding a panel</h3>

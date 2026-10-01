@@ -383,6 +383,36 @@ body.bf6-page {
     font-weight: 500;
 }
 
+/* Small "i" badge in a panel header. The sentence lives in the title attribute
+   because .bf-panel sets overflow: hidden, which would clip a CSS tooltip. */
+.bf-info {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex: none;
+    width: 15px;
+    height: 15px;
+    border: 1px solid var(--bf-border);
+    border-radius: 50%;
+    background: var(--bf-panel-2);
+    color: var(--bf-muted);
+    font-size: 10px;
+    font-weight: 700;
+    font-style: italic;
+    line-height: 1;
+    cursor: help;
+    -webkit-user-select: none;
+    user-select: none;
+}
+
+.bf-info:hover,
+.bf-info:focus {
+    background: var(--bf-card);
+    border-color: var(--bf-accent);
+    color: var(--bf-text-strong);
+    outline: none;
+}
+
 .bf-panel-body {
     padding: 16px 18px;
 }
