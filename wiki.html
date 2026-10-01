@@ -260,7 +260,7 @@
                     per class are never shown side by side because the player with more matches would win every
                     row before performance entered into it. A dash in that table means the player has no record of
                     that class at all, and a row containing a dash is never crowned. The overlay reuses the radar's own
-                    nine axes and its own ceilings, so the two shapes are directly comparable rather than two
+                    eight axes and its own ceilings, so the two shapes are directly comparable rather than two
                     differently scaled polygons.
                 </p>
 
@@ -403,9 +403,9 @@
                     <tbody>
                         <tr><td>XP split (donut)</td><td><code>renderXpDonut</code></td><td><code>bfXpDonutSvg</code></td><td>Total / performance / accolades XP — the API returns these as a one-element array <code>d.XP[0]</code></td></tr>
                         <tr><td>Kill types (donut)</td><td><code>renderKillTypeDonut</code></td><td><code>bfKillDonutSvg</code></td><td>The <code>KILL_LABELS</code> breakdown: infantry, vehicle, gadget, melee and so on</td></tr>
-                        <tr><td>Performance profile (radar)</td><td><code>renderRadar</code></td><td><code>bfRadarSvg</code></td><td>Nine normalised core stats, listed below</td></tr>
+                        <tr><td>Performance profile (radar)</td><td><code>renderRadar</code></td><td><code>bfRadarSvg</code></td><td>Eight normalised core stats, listed below</td></tr>
                         <tr><td>Per-class comparison (mix bars + table)</td><td>renderClassCompare</td><td><code>bfCompareClasses</code></td><td>The <em>union</em> of both players' classes, so a class only one of them has touched still appears. Mix bars are each player's share of their <em>own</em> class kills, which is playstyle; K/D and KPM are rates and stand up between players with very different match counts. Raw kills per class are deliberately never compared.</td></tr>
-                        <tr><td>Head to head (overlay radar + table)</td><td><code>renderCompare</code></td><td><code>bfComparePanel</code>, <code>bfCompareRadarSvg</code>, <code>bfCompareTable</code></td><td>Two players on the identical nine axes and ceilings. Only rendered when the optional <em>Compare with</em> field is filled in</td></tr>
+                        <tr><td>Head to head (overlay radar + table)</td><td><code>renderCompare</code></td><td><code>bfComparePanel</code>, <code>bfCompareRadarSvg</code>, <code>bfCompareTable</code></td><td>Two players on the identical eight axes and ceilings. Only rendered when the optional <em>Compare with</em> field is filled in</td></tr>
                         <tr><td>Class time (bars)</td><td><code>renderClassTime</code></td><td><code>bfClassTime</code></td><td><code>profile.kitTime</code> — the <code>tp_kit_*</code> profile fields</td></tr>
                         <tr><td>Mode time (bars)</td><td><code>renderModeTime</code></td><td><code>bfModeTime</code></td><td><code>tp_gm_*</code> per mode plus <code>tp_veh</code> in vehicles</td></tr>
                         <tr><td>Weapon class kills (bars)</td><td><code>renderWeaponClassKills</code></td><td><code>bfWeaponClassKills</code></td><td><code>kills_*_total</code> from the profile</td></tr>
@@ -442,7 +442,7 @@
 
                 <h3>6.2 Radar</h3>
                 <p>
-                    Nine axes, each divided by its own realistic ceiling and clamped to 0–100 % with
+                    Eight axes, each divided by its own realistic ceiling and clamped to 0–100 % with
                     <code>clampScore()</code>, then plotted around a circle and joined into a filled
                     <code>&lt;polygon&gt;</code>. Four background rings (25 / 50 / 75 / 100 %) and the axis spokes are
                     drawn first, so the shape always reads against a scale.
@@ -454,7 +454,6 @@
                     <tbody>
                         <tr><td>K/D</td><td>3</td><td>A strong ratio; above this is rare</td></tr>
                         <tr><td>Kills/min</td><td>4</td><td>Sprint tempo, not turtling</td></tr>
-                        <tr><td>Damage/min</td><td>800</td><td>High but reachable on a good round</td></tr>
                         <tr><td>Accuracy</td><td>50 %</td><td>Sustained fire rarely exceeds it</td></tr>
                         <tr><td>Headshot rate</td><td>70 %</td><td>Sniper-heavy players approach it</td></tr>
                         <tr><td>Win rate</td><td>100 %</td><td>Already a percentage</td></tr>
@@ -467,7 +466,7 @@
                     The ceilings are a display heuristic invented here, not a scale the game defines. They exist so that
                     a 25 % accuracy — genuinely good — does not render as a flat edge against a naive 0–100 axis. That
                     also makes the geometry ambiguous on its own: a vertex at 60 % of the way out means something
-                    completely different on Accuracy than it does on Damage/min. So the <em>real</em> value is printed
+                    completely different on Accuracy than it does on Points/min. So the <em>real</em> value is printed
                     on the chart itself, directly under each axis label, and every legend row shows both the real
                     number and the normalised score. Hovering a vertex reports all three plus the ceiling it was
                     measured against, which is also how a saturated axis reads — a player at 3.12 revives per match

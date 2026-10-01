@@ -1673,7 +1673,6 @@ function radarAxes(stats) {
     return [
         { label: 'K/D', value: clampScore(c.killDeath, 0, 3), raw: fmtNum(c.killDeath), ceiling: '3' },
         { label: 'Kills/min', value: clampScore(c.killsPerMinute, 0, 4), raw: fmtNum(c.killsPerMinute), ceiling: '4' },
-        { label: 'Damage/min', value: clampScore(c.damagePerMinute, 0, 800), raw: fmtInt(c.damagePerMinute), ceiling: '800' },
         { label: 'Accuracy', value: clampScore(c.accuracy, 0, 50), raw: fmtPct(c.accuracy), ceiling: '50 %' },
         { label: 'HS rate', value: clampScore(c.headshotPercent, 0, 70), raw: fmtPct(c.headshotPercent), ceiling: '70 %' },
         { label: 'Win rate', value: clampScore(c.winPercent, 0, 100), raw: fmtPct(c.winPercent), ceiling: '100 %' },
@@ -1751,7 +1750,7 @@ function drawRadar(svg, legend, axesA, axesB, nameA, nameB) {
 
         /* The real number, printed on the chart rather than only reachable
            through a 3px dot hover. 60% of the way out means something
-           completely different on Accuracy than it does on Damage/min, so the
+           completely different on Accuracy than it does on Points/min, so the
            axis label alone is not interpretable. When two players are overlaid
            this stays player A's figure and the legend carries both. */
         svg.appendChild(svgText(lx.toFixed(2), (ly + 15).toFixed(2), a.raw, 'bf-axis-value', anchor));

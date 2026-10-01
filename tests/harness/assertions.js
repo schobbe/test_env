@@ -64,12 +64,12 @@
             var radarScores = document.querySelectorAll('#bfRadarLegend .bf-legend-score');
 
             ok('S0b radar prints a value under every axis',
-                radarValues.length === 9, String(radarValues.length) + ' value labels');
+                radarValues.length === 8, String(radarValues.length) + ' value labels');
             ok('S0b radar viewBox has room for the second line',
                 Boolean(radar) && radar.getAttribute('viewBox') === '0 0 320 288',
                 radar ? String(radar.getAttribute('viewBox')) : '<no svg>');
             ok('S0b radar legend carries the normalised score',
-                radarScores.length === 9, String(radarScores.length) + ' scores');
+                radarScores.length === 8, String(radarScores.length) + ' scores');
             ok('S0b radar dots keep an absolute-value hover naming the ceiling',
                 Boolean(radar) && /\/100 \(ceiling /.test(radar.innerHTML),
                 'no "/100 (ceiling " found in the radar SVG');
@@ -163,7 +163,7 @@
                 document.querySelectorAll('#bfCompareRadarSvg polygon').length === 6,
                 String(document.querySelectorAll('#bfCompareRadarSvg polygon').length) + ' polygons (want 4 rings + 2 shapes)');
             ok('S6 radar draws a vertex per axis per player',
-                document.querySelectorAll('#bfCompareRadarSvg circle').length === 18,
+                document.querySelectorAll('#bfCompareRadarSvg circle').length === 16,
                 String(document.querySelectorAll('#bfCompareRadarSvg circle').length) + ' dots');
             ok('S6 legend names both players',
                 /offroad89/.test(txt('bfCompareRadarLegend')) && /rival_9x7/.test(txt('bfCompareRadarLegend')),
