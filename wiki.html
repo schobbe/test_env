@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Site Wiki — test_env</title>
-    <link rel="stylesheet" href="style.css?v=2">
+    <link rel="stylesheet" href="style.css?v=3">
 </head>
 <body class="wiki-page">
     <header>
@@ -16,6 +16,7 @@
                     <li><a href="map.html">Interactive Map</a></li>
                     <li><a href="bf6.html">BF6 Stats</a></li>
                     <li><a href="wiki.html" class="active">Wiki</a></li>
+                    <li><a href="#" class="chan-toggle" id="channelToggle" hidden>Beta</a></li>
                 </ul>
             </div>
         </nav>
@@ -493,8 +494,59 @@ python -m http.server 8500
                     VS Code's Live Server, <code>npx serve</code>.
                 </p>
                 <p>
-                    Published site: <a href="https://schobbe.github.io/test_env/">schobbe.github.io/test_env</a>, built by
-                    GitHub Pages from the <code>main</code> branch root. Pushing to <code>main</code> is the entire deploy step.
+                    Published site: <a href="https://schobbe.github.io/test_env/">schobbe.github.io/test_env</a>.
+                </p>
+
+                <h3>8.1 Branches and the beta preview</h3>
+                <p>
+                    The nav carries an amber pill that moves between the stable site and the beta one without
+                    leaving the page you are reading. Three branches sit behind it:
+                </p>
+                <table class="wiki-table">
+                    <thead><tr><th>Branch</th><th>Live at</th><th>Role</th></tr></thead>
+                    <tbody>
+                        <tr>
+                            <td><code>main</code></td>
+                            <td><code>/</code></td>
+                            <td>Stable. Every commit here is on the public site.</td>
+                        </tr>
+                        <tr>
+                            <td><code>beta</code></td>
+                            <td><code>/beta/</code></td>
+                            <td>Candidate builds, reached through the toggle. The last place something is looked at before it reaches the public site.</td>
+                        </tr>
+                        <tr>
+                            <td><code>dev</code></td>
+                            <td><em>never published</em></td>
+                            <td>Free-for-all development. Because it is not deployed, it is allowed to be broken.</td>
+                        </tr>
+                    </tbody>
+                </table>
+                <p>
+                    Promotion runs <code>dev</code> → <code>beta</code> → <code>main</code>, one explicit merge at a
+                    time. Nothing moves between branches on its own.
+                </p>
+                <p>
+                    GitHub Pages on the free plan serves exactly one site per repository, so both live versions are
+                    produced by <code>.github/workflows/pages.yml</code>, which assembles a composite tree —
+                    <code>main</code> into the root and <code>beta</code> into <code>/beta/</code> — and hands it to
+                    <code>actions/deploy-pages</code>. The <code>beta</code> checkout is marked
+                    <code>continue-on-error</code>, so a repository without a <code>beta</code> branch yet still
+                    deploys the stable site alone instead of failing the run.
+                </p>
+                <p>
+                    This only works because <strong>every link in the site is relative</strong>. There is no
+                    <code>url(/…)</code> in the CSS, no <code>href="/…"</code>, no ES-module import and no
+                    <code>location.pathname</code> used for assets anywhere in the repository, so the identical files
+                    work unchanged when served from a subdirectory. The toggle derives its own target from the path:
+                    under <code>/beta/</code> it points up to <code>../…</code>, anywhere else it points down to
+                    <code>beta/…</code>.
+                </p>
+                <p>
+                    <strong>Deploying by hand.</strong> Settings → Pages is set to <em>GitHub Actions</em>. Pushing to
+                    <code>main</code> or <code>beta</code> deploys automatically, and the workflow also carries a
+                    manual <em>Run workflow</em> trigger — the quickest way to force a redeploy without committing
+                    anything.
                 </p>
             </section>
 
@@ -507,5 +559,22 @@ python -m http.server 8500
             <p>&copy; 2026 My Website. Powered by GitHub Pages.</p>
         </div>
     </footer>
+    <script>
+        /* Stable <-> beta channel toggle. Every link in this site is relative,
+           so the same page exists one directory up (stable) or one down (beta)
+           and switching channel keeps you on the page you are reading. */
+        (function () {
+            var a = document.getElementById('channelToggle');
+            if (!a) return;
+            var onBeta = /\/beta(\/|$)/.test(window.location.pathname);
+            var page = window.location.pathname.split('/').pop() || 'index.html';
+            a.href = onBeta ? ('../' + page) : ('beta/' + page);
+            a.textContent = onBeta ? 'Stable' : 'Beta';
+            a.title = onBeta
+                ? 'On the beta preview — switch to the stable site'
+                : 'Switch to the beta preview of this site';
+            a.hidden = false;
+        }());
+    </script>
 </body>
 </html>

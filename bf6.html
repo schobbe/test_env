@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>BF6 Player Stats</title>
-    <link rel="stylesheet" href="bf6.css?v=3">
+    <link rel="stylesheet" href="bf6.css?v=4">
 </head>
 <body class="bf6-page">
     <!-- Top bar -->
@@ -16,6 +16,7 @@
                 <a href="map.html">Interactive Map</a>
                 <a href="bf6.html" class="active">BF6 Stats</a>
                 <a href="wiki.html">Wiki</a>
+                <a href="#" class="chan-toggle" id="channelToggle" hidden>Beta</a>
             </nav>
         </div>
     </div>
@@ -427,6 +428,23 @@
     </div>
 
     <script src="bf6.js?v=3"></script>
+    <script>
+        /* Stable <-> beta channel toggle. Every link in this site is relative,
+           so the same page exists one directory up (stable) or one down (beta)
+           and switching channel keeps you on the page you are reading. */
+        (function () {
+            var a = document.getElementById('channelToggle');
+            if (!a) return;
+            var onBeta = /\/beta(\/|$)/.test(window.location.pathname);
+            var page = window.location.pathname.split('/').pop() || 'index.html';
+            a.href = onBeta ? ('../' + page) : ('beta/' + page);
+            a.textContent = onBeta ? 'Stable' : 'Beta';
+            a.title = onBeta
+                ? 'On the beta preview — switch to the stable site'
+                : 'Switch to the beta preview of this site';
+            a.hidden = false;
+        }());
+    </script>
 </body>
 </html>
 

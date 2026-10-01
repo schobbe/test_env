@@ -1,0 +1,87 @@
+name: Deploy site to GitHub Pages
+
+# Publishes a composite tree:
+#
+#   main -> /        stable
+#   beta -> /beta/   preview, reached through the nav toggle
+#
+# dev is deliberately never published: it is where work-in-progress lives and
+# is free to be broken. Promotion is always an explicit merge, dev -> beta ->
+# main, and this workflow is what makes each promotion visible.
+#
+# The site needs no changes to live under /beta/ because every link in it is
+# relative (href="index.html", bf6.css?v=N, src="map.js"); there are no
+# root-absolute URLs anywhere in the repository.
+
+on:
+  push:
+    branches: [main, beta]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Never cancel an in-flight deployment: Pages deployments are atomic per run,
+# but a cancelled run wastes the slot and leaves a confusing "expected"
+# deployment state behind.
+concurrency:
+  group: github-pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout stable (main)
+        uses: actions/checkout@v7
+        with:
+          ref: main
+          path: stable-src
+
+      # beta may not exist on the first run, so a failed checkout must not fail
+      # the job - the assemble step below decides whether to publish it.
+      - name: Checkout beta
+        id: beta
+        continue-on-error: true
+        uses: actions/checkout@v7
+        with:
+          ref: beta
+          path: beta-src
+
+      - name: Setup Pages
+        uses: actions/configure-pages@v5
+
+      - name: Assemble site
+        run: |
+          set -euo pipefail
+          mkdir -p site
+          cp -a stable-src/. site/
+          # Never publish VCS or CI metadata to the web root.
+          rm -rf site/.git site/.github site/.gitignore
+
+          if [ -d beta-src/.git ]; then
+            mkdir -p site/beta
+            cp -a beta-src/. site/beta/
+            rm -rf site/beta/.git site/beta/.github site/beta/.gitignore
+            echo "Published main -> /  and  beta -> /beta/"
+          else
+            echo "No beta branch found; published main -> / only"
+          fi
+
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v4
+        with:
+          path: site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

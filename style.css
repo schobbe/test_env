@@ -63,6 +63,29 @@ body {
     background-color: rgba(255, 255, 255, 0.25);
 }
 
+/* Stable <-> beta channel switch. Amber so it never reads as an ordinary nav
+   item: it changes which site you are on, not which page. Declared for a bare
+   <a> too, because map.html carries its nav in a plain span, not .nav-links. */
+.nav-links a.chan-toggle,
+a.chan-toggle {
+    color: #fde68a;
+    background-color: rgba(251, 191, 36, 0.16);
+    border: 1px solid rgba(251, 191, 36, 0.6);
+    border-radius: 999px;
+    font-weight: 700;
+}
+
+.nav-links a.chan-toggle:hover,
+a.chan-toggle:hover {
+    background-color: rgba(251, 191, 36, 0.34);
+    border-color: rgba(251, 191, 36, 0.9);
+    color: #fff;
+}
+
+a.chan-toggle[hidden] {
+    display: none;
+}
+
 header {
     background: linear-gradient(135deg, #667eea, #764ba2);
     color: white;

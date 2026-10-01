@@ -104,6 +104,29 @@ body.bf6-page {
     border-color: var(--bf-accent-strong);
 }
 
+/* Stable <-> beta channel switch. Deliberately amber so it never reads as an
+   ordinary nav item: it changes which site you are on, not which page. */
+.bf-navlinks a.chan-toggle,
+a.chan-toggle {
+    color: #fbbf24;
+    background: rgba(251, 191, 36, 0.10);
+    border: 1px solid rgba(251, 191, 36, 0.45);
+    border-radius: 999px;
+    font-weight: 700;
+    letter-spacing: 0.03em;
+}
+
+.bf-navlinks a.chan-toggle:hover,
+a.chan-toggle:hover {
+    color: #fde68a;
+    background: rgba(251, 191, 36, 0.20);
+    border-color: rgba(251, 191, 36, 0.75);
+}
+
+a.chan-toggle[hidden] {
+    display: none;
+}
+
 /* ---------- Page intro ---------- */
 .bf-hero {
     padding: 26px 0 8px;
