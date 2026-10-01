@@ -410,9 +410,14 @@
                 </table>
                 <p>
                     The ceilings are a display heuristic invented here, not a scale the game defines. They exist so that
-                    a 25 % accuracy — genuinely good — does not render as a flat edge against a naive 0–100 axis. Each
-                    axis label in the legend still shows the <em>real</em> value, never the normalised one. If fewer than
-                    three axes have data the chart declines to draw and says so.
+                    a 25 % accuracy — genuinely good — does not render as a flat edge against a naive 0–100 axis. That
+                    also makes the geometry ambiguous on its own: a vertex at 60 % of the way out means something
+                    completely different on Accuracy than it does on Damage/min. So the <em>real</em> value is printed
+                    on the chart itself, directly under each axis label, and every legend row shows both the real
+                    number and the normalised score. Hovering a vertex reports all three plus the ceiling it was
+                    measured against, which is also how a saturated axis reads — a player at 3.12 revives per match
+                    scores exactly the same 100/100 as one at 3.00, and only the printed value shows the difference.
+                    If fewer than three axes have data the chart declines to draw and says so.
                 </p>
 
                 <h3>6.3 Bars</h3>

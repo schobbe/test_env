@@ -57,6 +57,23 @@
                 String(appState.showingPlayer).toLowerCase().indexOf('offroad') !== -1,
                 String(appState.showingPlayer));
 
+            /* --- S0b: the radar must print absolute values on the chart itself,
+                   not leave them only behind a hover on a 3px dot --- */
+            var radar = $('bfRadarSvg');
+            var radarValues = radar ? radar.querySelectorAll('text.bf-axis-value') : [];
+            var radarScores = document.querySelectorAll('#bfRadarLegend .bf-legend-score');
+
+            ok('S0b radar prints a value under every axis',
+                radarValues.length === 8, String(radarValues.length) + ' value labels');
+            ok('S0b radar viewBox has room for the second line',
+                Boolean(radar) && radar.getAttribute('viewBox') === '0 0 320 288',
+                radar ? String(radar.getAttribute('viewBox')) : '<no svg>');
+            ok('S0b radar legend carries the normalised score',
+                radarScores.length === 8, String(radarScores.length) + ' scores');
+            ok('S0b radar dots keep an absolute-value hover naming the ceiling',
+                Boolean(radar) && /\/100 \(ceiling /.test(radar.innerHTML),
+                'no "/100 (ceiling " found in the radar SVG');
+
             /* --- S1: a definitive 404 must NOT leave the previous player up --- */
             window.__mode = 'error404';
             await loadPlayer('zzz_no_such_player_9x7', 'steam');

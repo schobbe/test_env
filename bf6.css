@@ -690,6 +690,14 @@ a.chan-toggle[hidden] {
     font-weight: 600;
 }
 
+/* The absolute value printed under each radar axis label. Brighter than the
+   label itself: the label names the axis, this is the number behind it. */
+.bf-axis-value {
+    fill: var(--bf-text-strong);
+    font-size: 10px;
+    font-weight: 700;
+}
+
 .bf-axis-tick {
     fill: var(--bf-muted);
     font-size: 10px;
@@ -719,6 +727,16 @@ a.chan-toggle[hidden] {
     gap: 7px;
     flex: 1 1 140px;
     min-width: 0;
+}
+
+/* Normalised score beside the real value in the radar legend. Muted so the
+   absolute number stays the thing the eye lands on first. */
+.bf-legend-score {
+    flex: none;
+    font-size: 0.72em;
+    font-weight: 600;
+    color: var(--bf-muted);
+    opacity: 0.85;
 }
 
 .bf-legend-swatch {

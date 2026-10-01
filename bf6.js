@@ -1646,14 +1646,14 @@ function radarAxes(stats) {
     const objectiveSeconds = objective.time ? toNum(objective.time.total) : 0;
 
     return [
-        { label: 'K/D', value: clampScore(c.killDeath, 0, 3), raw: fmtNum(c.killDeath) },
-        { label: 'Kills/min', value: clampScore(c.killsPerMinute, 0, 4), raw: fmtNum(c.killsPerMinute) },
-        { label: 'Damage/min', value: clampScore(c.damagePerMinute, 0, 800), raw: fmtInt(c.damagePerMinute) },
-        { label: 'Accuracy', value: clampScore(c.accuracy, 0, 50), raw: fmtPct(c.accuracy) },
-        { label: 'HS rate', value: clampScore(c.headshotPercent, 0, 70), raw: fmtPct(c.headshotPercent) },
-        { label: 'Win rate', value: clampScore(c.winPercent, 0, 100), raw: fmtPct(c.winPercent) },
-        { label: 'Revives/match', value: clampScore(c.revives / matches, 0, 3), raw: fmtNum(c.revives / matches) },
-        { label: 'Obj time/match', value: clampScore(objectiveSeconds / matches, 0, 600), raw: fmtDuration(objectiveSeconds / matches) }
+        { label: 'K/D', value: clampScore(c.killDeath, 0, 3), raw: fmtNum(c.killDeath), ceiling: '3' },
+        { label: 'Kills/min', value: clampScore(c.killsPerMinute, 0, 4), raw: fmtNum(c.killsPerMinute), ceiling: '4' },
+        { label: 'Damage/min', value: clampScore(c.damagePerMinute, 0, 800), raw: fmtInt(c.damagePerMinute), ceiling: '800' },
+        { label: 'Accuracy', value: clampScore(c.accuracy, 0, 50), raw: fmtPct(c.accuracy), ceiling: '50 %' },
+        { label: 'HS rate', value: clampScore(c.headshotPercent, 0, 70), raw: fmtPct(c.headshotPercent), ceiling: '70 %' },
+        { label: 'Win rate', value: clampScore(c.winPercent, 0, 100), raw: fmtPct(c.winPercent), ceiling: '100 %' },
+        { label: 'Revives/match', value: clampScore(c.revives / matches, 0, 3), raw: fmtNum(c.revives / matches), ceiling: '3' },
+        { label: 'Obj time/match', value: clampScore(objectiveSeconds / matches, 0, 600), raw: fmtDuration(objectiveSeconds / matches), ceiling: '600 s' }
     ];
 }
 
@@ -1669,7 +1669,11 @@ function renderRadar(stats) {
         return;
     }
 
-    svg.setAttribute('viewBox', '0 0 320 260');
+    /* Taller than the 8-axis labels need on their own: each label carries a
+       second line with its real value underneath, and the bottom axis is the
+       worst case. Nothing is clipped either way, because .bf-radar-svg sets
+       overflow: visible. */
+    svg.setAttribute('viewBox', '0 0 320 288');
     const cx = 160, cy = 128, r = 84, n = axes.length;
 
     const ringPoints = (f) => {
@@ -1707,6 +1711,12 @@ function renderRadar(stats) {
         const cos = Math.cos(ang);
         const anchor = Math.abs(cos) < 0.35 ? 'middle' : (cos > 0 ? 'start' : 'end');
         svg.appendChild(svgText(lx.toFixed(2), (ly + 3).toFixed(2), a.label, 'bf-axis-label', anchor));
+
+        /* The real number, printed on the chart rather than only reachable
+           through a 3px dot hover. 60% of the way out means something
+           completely different on Accuracy than it does on Damage/min, so the
+           axis label alone is not interpretable. */
+        svg.appendChild(svgText(lx.toFixed(2), (ly + 15).toFixed(2), a.raw, 'bf-axis-value', anchor));
     });
 
     const points = axes.map((a, i) => {
@@ -1729,14 +1739,16 @@ function renderRadar(stats) {
             cx: p.x.toFixed(2), cy: p.y.toFixed(2), r: 3.2,
             fill: '#c7d2fe', stroke: '#4f46e5', 'stroke-width': 1
         });
-        svgTitle(dot, p.axis.label + ': ' + p.axis.raw);
+        svgTitle(dot, p.axis.label + '  ' + p.axis.raw +
+            '  ·  ' + Math.round(p.axis.value) + '/100 (ceiling ' + p.axis.ceiling + ')');
         svg.appendChild(dot);
     });
 
     axes.forEach((a) => {
         legend.appendChild(el('div', { class: 'bf-legend-item' }, [
             el('span', { class: 'bf-legend-name', text: a.label }),
-            el('span', { class: 'bf-legend-val', text: a.raw })
+            el('span', { class: 'bf-legend-val', text: a.raw }),
+            el('span', { class: 'bf-legend-score', text: Math.round(a.value) + '/100' })
         ]));
     });
 }
