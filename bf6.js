@@ -599,6 +599,8 @@ function renderOverview(stats) {
     grid.appendChild(statCard('Infantry K/D', fmtNum(c.infantryKillDeath), c.infantryKillDeath >= 1 ? 'green' : 'red'));
     grid.appendChild(statCard('Kills / min', fmtNum(c.killsPerMinute)));
     grid.appendChild(statCard('Damage / min', fmtNum(c.damagePerMinute)));
+    grid.appendChild(statCard('Points / min', fmtInt(scorePerMinute(stats)), null,
+        'derived from ' + fmtInt(c.score) + ' total score'));
     grid.appendChild(statCard('Kills / match', fmtNum(c.killsPerMatch)));
     grid.appendChild(statCard('Damage / match', fmtInt(c.damagePerMatch)));
     grid.appendChild(statCard('Wins', fmtInt(c.wins), 'green'));
@@ -1651,10 +1653,22 @@ function objectiveSeconds(stats) {
     return o.time ? toNum(o.time.total) : 0;
 }
 
+/* Score per minute. The API reports only a lifetime `score` and
+   `secondsPlayed`, never a score rate, so this has to be derived. Being a
+   rate rather than a total is exactly what makes it comparable between two
+   players: the one with more matches cannot win on it. Guarded because a
+   player with no recorded playtime would otherwise divide by zero. */
+function scorePerMinute(stats) {
+    const minutes = toNum(stats.core.secondsPlayed) / 60;
+    if (!(minutes > 0)) return 0;
+    return toNum(stats.core.score) / minutes;
+}
+
 function radarAxes(stats) {
     const c = stats.core;
     const matches = matchesOf(stats);
     const objSeconds = objectiveSeconds(stats);
+    const ptsPerMin = scorePerMinute(stats);
 
     return [
         { label: 'K/D', value: clampScore(c.killDeath, 0, 3), raw: fmtNum(c.killDeath), ceiling: '3' },
@@ -1664,7 +1678,10 @@ function radarAxes(stats) {
         { label: 'HS rate', value: clampScore(c.headshotPercent, 0, 70), raw: fmtPct(c.headshotPercent), ceiling: '70 %' },
         { label: 'Win rate', value: clampScore(c.winPercent, 0, 100), raw: fmtPct(c.winPercent), ceiling: '100 %' },
         { label: 'Revives/match', value: clampScore(c.revives / matches, 0, 3), raw: fmtNum(c.revives / matches), ceiling: '3' },
-        { label: 'Obj time/match', value: clampScore(objSeconds / matches, 0, 600), raw: fmtDuration(objSeconds / matches), ceiling: '600 s' }
+        { label: 'Obj time/match', value: clampScore(objSeconds / matches, 0, 600), raw: fmtDuration(objSeconds / matches), ceiling: '600 s' },
+        /* Appended last so the existing eight spokes keep their positions and
+           K/D stays at the top of the chart. */
+        { label: 'Points/min', value: clampScore(ptsPerMin, 0, 500), raw: fmtInt(ptsPerMin), ceiling: '500' }
     ];
 }
 
@@ -2799,6 +2816,9 @@ const COMPARE_STATS = [
     { label: 'Win rate', pick: (s) => s.core.winPercent, fmt: fmtPct, better: 'higher' },
     { label: 'Kills / min', pick: (s) => s.core.killsPerMinute, fmt: fmtNum, better: 'higher' },
     { label: 'Damage / min', pick: (s) => s.core.damagePerMinute, fmt: fmtInt, better: 'higher' },
+    /* Derived, not reported: still a rate, so it is judged rather than tagged
+       as volume. */
+    { label: 'Points / min', pick: (s) => scorePerMinute(s), fmt: fmtInt, better: 'higher' },
     { label: 'Revives / match', pick: (s) => toNum(s.core.revives) / matchesOf(s), fmt: fmtNum, better: 'higher' },
     { label: 'Objective time / match', pick: (s) => objectiveSeconds(s) / matchesOf(s), fmt: fmtDuration, better: 'higher' },
     { label: 'Kills', pick: (s) => s.core.kills, fmt: fmtInt, better: 'volume' },

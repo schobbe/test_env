@@ -64,12 +64,12 @@
             var radarScores = document.querySelectorAll('#bfRadarLegend .bf-legend-score');
 
             ok('S0b radar prints a value under every axis',
-                radarValues.length === 8, String(radarValues.length) + ' value labels');
+                radarValues.length === 9, String(radarValues.length) + ' value labels');
             ok('S0b radar viewBox has room for the second line',
                 Boolean(radar) && radar.getAttribute('viewBox') === '0 0 320 288',
                 radar ? String(radar.getAttribute('viewBox')) : '<no svg>');
             ok('S0b radar legend carries the normalised score',
-                radarScores.length === 8, String(radarScores.length) + ' scores');
+                radarScores.length === 9, String(radarScores.length) + ' scores');
             ok('S0b radar dots keep an absolute-value hover naming the ceiling',
                 Boolean(radar) && /\/100 \(ceiling /.test(radar.innerHTML),
                 'no "/100 (ceiling " found in the radar SVG');
@@ -147,7 +147,7 @@
                 return document.querySelectorAll('#bfCompareTable tbody tr').length > 0;
             }, 400);
 
-            var JUDGED = 8;   /* rows above the volume block */
+            var JUDGED = 9;   /* rows above the volume block */
             var rows = document.querySelectorAll('#bfCompareTable tbody tr');
             var winsForRival = 0;
             var volumeWins = 0;
@@ -158,12 +158,12 @@
             });
 
             ok('S6 compare panel is shown', disp('bfComparePanel') !== 'none', disp('bfComparePanel'));
-            ok('S6 table has one row per stat', rows.length === 12, String(rows.length) + ' rows');
+            ok('S6 table has one row per stat', rows.length === 13, String(rows.length) + ' rows');
             ok('S6 radar overlays two shapes on the shared rings',
                 document.querySelectorAll('#bfCompareRadarSvg polygon').length === 6,
                 String(document.querySelectorAll('#bfCompareRadarSvg polygon').length) + ' polygons (want 4 rings + 2 shapes)');
             ok('S6 radar draws a vertex per axis per player',
-                document.querySelectorAll('#bfCompareRadarSvg circle').length === 16,
+                document.querySelectorAll('#bfCompareRadarSvg circle').length === 18,
                 String(document.querySelectorAll('#bfCompareRadarSvg circle').length) + ' dots');
             ok('S6 legend names both players',
                 /offroad89/.test(txt('bfCompareRadarLegend')) && /rival_9x7/.test(txt('bfCompareRadarLegend')),
@@ -176,6 +176,19 @@
                 document.querySelectorAll('#bfCompareTable td.good').length + ' leaders, ' +
                 winsForRival + ' of them handed to the weaker player');
             ok('S6 volume rows are never crowned', volumeWins === 0, volumeWins + ' volume leaders');
+
+            /* --- S6a: the derived Points / min reached all three surfaces --- */
+            var cardLabels = Array.prototype.map.call(
+                document.querySelectorAll('#bfOverview .bf-stat-label'),
+                function (n) { return n.textContent; });
+            ok('S6a Points / min is in the overview cards',
+                cardLabels.indexOf('Points / min') !== -1, cardLabels.length + ' cards, no Points / min');
+            ok('S6a Points / min is a judged row in the comparison',
+                flat(txt('bfCompareTable')).indexOf('Points / min') !== -1,
+                flat(txt('bfCompareTable')).indexOf('Points / min') !== -1 ? 'present' : 'missing');
+            ok('S6a Points / min is on the radar',
+                flat(txt('bfRadarLegend')).indexOf('Points/min') !== -1,
+                flat(txt('bfRadarLegend')).indexOf('Points/min') !== -1 ? 'present' : 'missing');
 
             /* --- S8: the per-class comparison --- */
             var classRows = document.querySelectorAll('#bfCompareClasses .bf-compare-classes tbody tr');
