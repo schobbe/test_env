@@ -126,6 +126,68 @@
             ok('S5 search button re-enabled', $('bfSubmitBtn').disabled === false,
                 String($('bfSubmitBtn').disabled));
             ok('S5 skeleton hidden', disp('bfSkeleton') === 'none', disp('bfSkeleton'));
+
+            /* --- S6: the head-to-head comparison renders both players --- */
+            window.__mode = 'live';
+            window.__force404Name = null;
+            window.__scaleName = 'vs_rival_9x7';
+            window.__scaleAs = 'rival_9x7';
+            window.__scaleFactor = 0.5;   /* the rival is deliberately weaker */
+
+            var vsInput = $('bfCompareInput');
+            ok('S6 compare field exists', Boolean(vsInput), 'no #bfCompareInput');
+            vsInput.value = 'vs_rival_9x7';
+
+            await loadPlayer('offroad89', 'steam');
+            await waitFor(function () {
+                return document.querySelectorAll('#bfCompareTable tbody tr').length > 0;
+            }, 400);
+
+            var JUDGED = 8;   /* rows above the volume block */
+            var rows = document.querySelectorAll('#bfCompareTable tbody tr');
+            var winsForRival = 0;
+            var volumeWins = 0;
+            Array.prototype.forEach.call(rows, function (tr, i) {
+                var tds = tr.querySelectorAll('td');
+                if (tds[2] && /\bgood\b/.test(tds[2].className)) winsForRival++;
+                if (i >= JUDGED && tr.querySelector('td.good')) volumeWins++;
+            });
+
+            ok('S6 compare panel is shown', disp('bfComparePanel') !== 'none', disp('bfComparePanel'));
+            ok('S6 table has one row per stat', rows.length === 12, String(rows.length) + ' rows');
+            ok('S6 radar overlays two shapes on the shared rings',
+                document.querySelectorAll('#bfCompareRadarSvg polygon').length === 6,
+                String(document.querySelectorAll('#bfCompareRadarSvg polygon').length) + ' polygons (want 4 rings + 2 shapes)');
+            ok('S6 radar draws a vertex per axis per player',
+                document.querySelectorAll('#bfCompareRadarSvg circle').length === 16,
+                String(document.querySelectorAll('#bfCompareRadarSvg circle').length) + ' dots');
+            ok('S6 legend names both players',
+                /offroad89/.test(txt('bfCompareRadarLegend')) && /rival_9x7/.test(txt('bfCompareRadarLegend')),
+                flat(txt('bfCompareRadarLegend')).slice(0, 70));
+            ok('S6 volume rows are tagged, not judged',
+                document.querySelectorAll('#bfCompareTable .bf-compare-tag').length === 4,
+                String(document.querySelectorAll('#bfCompareTable .bf-compare-tag').length) + ' volume tags');
+            ok('S6 the stronger player leads every judged row',
+                document.querySelectorAll('#bfCompareTable td.good').length === JUDGED && winsForRival === 0,
+                document.querySelectorAll('#bfCompareTable td.good').length + ' leaders, ' +
+                winsForRival + ' of them handed to the weaker player');
+            ok('S6 volume rows are never crowned', volumeWins === 0, volumeWins + ' volume leaders');
+
+            /* --- S7: a bad second name must not disturb the main player --- */
+            window.__force404Name = 'zzz_missing_9x7';
+            vsInput.value = 'zzz_missing_9x7';
+            await loadPlayer('offroad89', 'steam');
+            await waitFor(function () {
+                return txt('bfComparePanel').indexOf('Could not load') !== -1;
+            }, 400);
+
+            ok('S7 the failure is reported inside the comparison panel',
+                txt('bfComparePanel').indexOf('Could not load') !== -1,
+                flat(txt('bfComparePanel')).slice(0, 70));
+            ok('S7 the main player is untouched',
+                disp('bfResults') === 'block' && flat(txt('bfStatus')) === '',
+                disp('bfResults') + ' / status="' + flat(txt('bfStatus')) + '"');
+            window.__force404Name = null;
         } catch (e) {
             results.push('FAIL | harness exception | ' + (e && e.stack ? e.stack : e));
         }

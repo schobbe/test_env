@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>BF6 Player Stats</title>
-    <link rel="stylesheet" href="bf6.css?v=5">
+    <link rel="stylesheet" href="bf6.css?v=6">
 </head>
 <body class="bf6-page">
     <!-- Top bar -->
@@ -44,6 +44,23 @@
             <div class="bf-field">
                 <button type="button" class="bf-btn ghost" id="bfSaveBtn" aria-pressed="false">Save</button>
             </div>
+
+            <!-- Optional second player. Its own row so it reads as an extra,
+                 clearly secondary step rather than part of the main search. -->
+            <div class="bf-search-row">
+                <div class="bf-field grow">
+                    <label for="bfCompareInput">Compare with (optional)</label>
+                    <input type="text" id="bfCompareInput" name="vs" placeholder="e.g. another player" autocomplete="off">
+                </div>
+                <div class="bf-field">
+                    <label for="bfComparePlatform">Their platform</label>
+                    <select id="bfComparePlatform" name="vsplatform"></select>
+                </div>
+                <p class="bf-hint bf-compare-hint">
+                    Adds an overlay radar and a head-to-head table. Leave it empty for the normal single-player view.
+                </p>
+            </div>
+
             <div class="bf-hint">
                 ℹ️ The API matches names exactly (no fuzzy search), and names are case-sensitive. If a lookup fails,
                 double-check the spelling and try another platform — the same player can exist on both <em>ea</em> and <em>steam</em>.
@@ -70,6 +87,32 @@
 
             <!-- Identity -->
             <div class="bf-identity" id="bfIdentity"></div>
+
+            <!-- Head to head. Only drawn when a second player was asked for;
+                 it lives inside #bfResults so it is hidden automatically
+                 whenever the main results are (a 404, for instance). -->
+            <div class="bf-panel" id="bfComparePanel" style="display:none;">
+                <div class="bf-panel-head">
+                    <h2>⚔️ Head to Head <span class="bf-info" tabindex="0" title="The overlay uses exactly the same eight axes and the same ceilings as the Performance Profile above, so the two shapes are directly comparable. The table marks a leader only where higher is genuinely better: raw totals such as kills, deaths and score are volume, not skill, and are never counted as a win.">i</span></h2>
+                    <span class="bf-count" id="bfCompareCount"></span>
+                </div>
+                <div class="bf-panel-body">
+                    <!-- Loading / error slot. Deliberately separate from the
+                         chart and table hosts below: clearing the whole panel
+                         would delete those two nodes, and the renderers look
+                         them up by id. -->
+                    <div id="bfCompareNotice"></div>
+                    <div class="bf-chart-grid">
+                        <div>
+                            <div class="bf-chart-figure">
+                                <svg class="bf-radar-svg" id="bfCompareRadarSvg"></svg>
+                            </div>
+                            <div class="bf-chart-legend" id="bfCompareRadarLegend"></div>
+                        </div>
+                        <div id="bfCompareTable"></div>
+                    </div>
+                </div>
+            </div>
 
             <!-- Overview stat cards -->
             <div class="bf-stat-grid" id="bfOverview"></div>
@@ -427,7 +470,7 @@
         </div>
     </div>
 
-    <script src="bf6.js?v=5"></script>
+    <script src="bf6.js?v=6"></script>
     <script>
         /* Stable <-> beta channel toggle. Every link in this site is relative,
            so the same page exists one directory up (stable) or one down (beta)

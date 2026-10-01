@@ -1639,11 +1639,22 @@ function clampScore(v, lo, hi) {
 
 /* Each axis gets its own realistic range so a 25% accuracy does not read as
    a 25% radar score against a 0-100 axis. Ranges are display heuristics. */
+/* Derived per-match figures. The radar and the head-to-head table both need
+   these, and they must never disagree about how many matches a player has, so
+   both read them from here rather than re-deriving. */
+function matchesOf(stats) {
+    return Math.max(1, toNum(stats.core.matchesPlayed));
+}
+
+function objectiveSeconds(stats) {
+    const o = stats.objective || {};
+    return o.time ? toNum(o.time.total) : 0;
+}
+
 function radarAxes(stats) {
     const c = stats.core;
-    const matches = Math.max(1, c.matchesPlayed);
-    const objective = stats.objective || {};
-    const objectiveSeconds = objective.time ? toNum(objective.time.total) : 0;
+    const matches = matchesOf(stats);
+    const objSeconds = objectiveSeconds(stats);
 
     return [
         { label: 'K/D', value: clampScore(c.killDeath, 0, 3), raw: fmtNum(c.killDeath), ceiling: '3' },
@@ -1653,17 +1664,26 @@ function radarAxes(stats) {
         { label: 'HS rate', value: clampScore(c.headshotPercent, 0, 70), raw: fmtPct(c.headshotPercent), ceiling: '70 %' },
         { label: 'Win rate', value: clampScore(c.winPercent, 0, 100), raw: fmtPct(c.winPercent), ceiling: '100 %' },
         { label: 'Revives/match', value: clampScore(c.revives / matches, 0, 3), raw: fmtNum(c.revives / matches), ceiling: '3' },
-        { label: 'Obj time/match', value: clampScore(objectiveSeconds / matches, 0, 600), raw: fmtDuration(objectiveSeconds / matches), ceiling: '600 s' }
+        { label: 'Obj time/match', value: clampScore(objSeconds / matches, 0, 600), raw: fmtDuration(objSeconds / matches), ceiling: '600 s' }
     ];
 }
 
-function renderRadar(stats) {
-    const svg = $('bfRadarSvg');
-    const legend = $('bfRadarLegend');
+const RADAR_COLOR_A = '#818cf8';
+const RADAR_COLOR_B = '#f59e0b';
+
+/* Draws the spider chart. axesA is always drawn; when axesB is supplied a
+   second player is overlaid in a different colour, using the same axes and the
+   same ceilings so the two shapes are directly comparable rather than merely
+   similar. nameA/nameB label the legend columns in that case. */
+function drawRadar(svg, legend, axesA, axesB, nameA, nameB) {
+    if (!svg || !legend) return;
     clear(svg);
     clear(legend);
 
-    const axes = radarAxes(stats);
+    const axes = axesA || [];
+    const hasB = Boolean(axesB) && axesB.length === axes.length;
+    legend.classList.toggle('is-compare', hasB);
+
     if (axes.length < 3) {
         legend.appendChild(el('div', { class: 'bf-muted', text: 'Not enough data to draw a profile.' }));
         return;
@@ -1715,34 +1735,66 @@ function renderRadar(stats) {
         /* The real number, printed on the chart rather than only reachable
            through a 3px dot hover. 60% of the way out means something
            completely different on Accuracy than it does on Damage/min, so the
-           axis label alone is not interpretable. */
+           axis label alone is not interpretable. When two players are overlaid
+           this stays player A's figure and the legend carries both. */
         svg.appendChild(svgText(lx.toFixed(2), (ly + 15).toFixed(2), a.raw, 'bf-axis-value', anchor));
     });
 
-    const points = axes.map((a, i) => {
-        const ang = (i / n) * 2 * Math.PI - Math.PI / 2;
-        const rr = (r * Math.max(0, Math.min(100, a.value))) / 100;
-        return { x: cx + rr * Math.cos(ang), y: cy + rr * Math.sin(ang), axis: a };
-    });
-
-    svg.appendChild(svgEl('polygon', {
-        points: points.map((p) => p.x.toFixed(2) + ',' + p.y.toFixed(2)).join(' '),
-        fill: 'rgba(129,140,248,0.30)',
-        stroke: '#818cf8',
-        'stroke-width': 2,
-        'stroke-linejoin': 'round',
-        'vector-effect': 'non-scaling-stroke'
-    }));
-
-    points.forEach((p) => {
-        const dot = svgEl('circle', {
-            cx: p.x.toFixed(2), cy: p.y.toFixed(2), r: 3.2,
-            fill: '#c7d2fe', stroke: '#4f46e5', 'stroke-width': 1
+    const series = [{
+        axes: axesA, color: RADAR_COLOR_A, fill: 'rgba(129,140,248,0.30)',
+        dot: '#c7d2fe', edge: '#4f46e5', name: nameA
+    }];
+    if (hasB) {
+        series.push({
+            axes: axesB, color: RADAR_COLOR_B, fill: 'rgba(245,158,11,0.22)',
+            dot: '#fde68a', edge: '#b45309', name: nameB
         });
-        svgTitle(dot, p.axis.label + '  ' + p.axis.raw +
-            '  ·  ' + Math.round(p.axis.value) + '/100 (ceiling ' + p.axis.ceiling + ')');
-        svg.appendChild(dot);
+    }
+
+    series.forEach((s) => {
+        const points = s.axes.map((a, i) => {
+            const ang = (i / n) * 2 * Math.PI - Math.PI / 2;
+            const rr = (r * Math.max(0, Math.min(100, a.value))) / 100;
+            return { x: cx + rr * Math.cos(ang), y: cy + rr * Math.sin(ang), axis: a };
+        });
+
+        svg.appendChild(svgEl('polygon', {
+            points: points.map((p) => p.x.toFixed(2) + ',' + p.y.toFixed(2)).join(' '),
+            fill: s.fill,
+            stroke: s.color,
+            'stroke-width': 2,
+            'stroke-linejoin': 'round',
+            'vector-effect': 'non-scaling-stroke'
+        }));
+
+        points.forEach((p) => {
+            const dot = svgEl('circle', {
+                cx: p.x.toFixed(2), cy: p.y.toFixed(2), r: 3.2,
+                fill: s.dot, stroke: s.edge, 'stroke-width': 1
+            });
+            svgTitle(dot, (s.name ? s.name + ' — ' : '') + p.axis.label + '  ' + p.axis.raw +
+                '  ·  ' + Math.round(p.axis.value) + '/100 (ceiling ' + p.axis.ceiling + ')');
+            svg.appendChild(dot);
+        });
     });
+
+    if (hasB) {
+        /* One value column per player, headed with the names and their colours,
+           so the reader never has to guess which polygon a number belongs to. */
+        legend.appendChild(el('div', { class: 'bf-legend-item' }, [
+            el('span', { class: 'bf-legend-name', text: '' }),
+            el('span', { class: 'bf-legend-val', style: 'color:' + RADAR_COLOR_A, text: nameA || 'Player A' }),
+            el('span', { class: 'bf-legend-val', style: 'color:' + RADAR_COLOR_B, text: nameB || 'Player B' })
+        ]));
+        axes.forEach((a, i) => {
+            legend.appendChild(el('div', { class: 'bf-legend-item' }, [
+                el('span', { class: 'bf-legend-name', text: a.label }),
+                el('span', { class: 'bf-legend-val', text: a.raw }),
+                el('span', { class: 'bf-legend-val', text: axesB[i].raw })
+            ]));
+        });
+        return;
+    }
 
     axes.forEach((a) => {
         legend.appendChild(el('div', { class: 'bf-legend-item' }, [
@@ -1751,6 +1803,10 @@ function renderRadar(stats) {
             el('span', { class: 'bf-legend-score', text: Math.round(a.value) + '/100' })
         ]));
     });
+}
+
+function renderRadar(stats) {
+    drawRadar($('bfRadarSvg'), $('bfRadarLegend'), radarAxes(stats), null, '', '');
 }
 
 /* --------------------------- WEAPON SCATTER ---------------------------- */
@@ -2512,6 +2568,21 @@ function updateUrl(name, platform) {
         const url = new URL(window.location.href);
         url.searchParams.set('name', name);
         url.searchParams.set('platform', platform);
+
+        /* The comparison belongs in the URL too, so a head-to-head is
+           shareable and survives a reload. Cleared rather than left stale when
+           the field is empty, or the link would always carry a dead player. */
+        const vsInput = $('bfCompareInput');
+        const vsSel = $('bfComparePlatform');
+        const vs = vsInput ? vsInput.value.trim() : '';
+        if (vs) {
+            url.searchParams.set('vs', vs);
+            url.searchParams.set('vsplatform', vsSel ? vsSel.value : platform);
+        } else {
+            url.searchParams.delete('vs');
+            url.searchParams.delete('vsplatform');
+        }
+
         window.history.replaceState(null, '', url.toString());
     } catch (e) { /* non-fatal */ }
 }
@@ -2520,26 +2591,53 @@ function readUrl() {
     try {
         const p = new URLSearchParams(window.location.search);
         const name = p.get('name');
-        if (name) return { name: name, platform: p.get('platform') || DEFAULT_PLAYER.platform };
+        if (!name) return null;
+        return {
+            name: name,
+            platform: p.get('platform') || DEFAULT_PLAYER.platform,
+            vs: p.get('vs') || '',
+            vsplatform: p.get('vsplatform') || ''
+        };
     } catch (e) { /* ignore */ }
     return null;
 }
 
-function populatePlatforms() {
-    const sel = $('bfPlatformSelect');
-    clear(sel);
-    PLATFORMS.forEach((pair) => sel.appendChild(el('option', { value: pair[0], text: pair[1] })));
+/* Both platform dropdowns carry the same list, so these take the target
+   element rather than each hard-coding an id. */
+function populatePlatforms(sel) {
+    const target = sel || $('bfPlatformSelect');
+    if (!target) return;
+    clear(target);
+    PLATFORMS.forEach((pair) => target.appendChild(el('option', { value: pair[0], text: pair[1] })));
 }
 
-function ensurePlatformOption(platform) {
-    const sel = $('bfPlatformSelect');
-    if (!platform) return;
-    const exists = Array.prototype.some.call(sel.options, (o) => o.value === platform);
-    if (!exists) sel.appendChild(el('option', { value: platform, text: platform }));
-    sel.value = platform;
+function ensurePlatformOption(platform, sel) {
+    const target = sel || $('bfPlatformSelect');
+    if (!platform || !target) return;
+    const exists = Array.prototype.some.call(target.options, (o) => o.value === platform);
+    if (!exists) target.appendChild(el('option', { value: platform, text: platform }));
+    target.value = platform;
 }
 
 /* ------------------------------- LOADERS ------------------------------- */
+
+/* One way to ask the API for a player. The main lookup and the comparison
+   player both go through here, so they share the throttle queue, the
+   normalisation, the "no such player" rule and the error kinds. Only the main
+   lookup also asks for /bf6/profile/, which feeds the identity and highlight
+   panels - those stay single-player. */
+async function fetchStats(name, platform) {
+    const raw = await apiGet('/bf6/stats/', {
+        name: name,
+        platform: platform,
+        seperation: true
+    });
+    const stats = normaliseStats(raw);
+    /* An empty payload is a 404 in everything but name: without this the page
+       would render a completely blank dashboard as if it had succeeded. */
+    if (!stats.player.name) throw ApiError('Player not found', 'notfound', 404);
+    return stats;
+}
 
 /* Monotonic token for loadPlayer. Only the newest lookup may touch the page:
    without it a slower, earlier search resolving last would overwrite - or
@@ -2595,6 +2693,9 @@ function setStaleNotice(shownName, queriedName) {
 
 async function loadPlayer(name, platform) {
     const token = ++lookupToken;
+    /* A new main lookup invalidates any comparison still in flight, otherwise a
+       slow second player could land on top of somebody else's results. */
+    ++compareToken;
     setStatus(null);
     setStaleNotice(null);
     setLoading(true, 'Loading');
@@ -2609,17 +2710,10 @@ async function loadPlayer(name, platform) {
                 return null;
             });
 
-        const raw = await apiGet('/bf6/stats/', {
-            name: name,
-            platform: platform,
-            seperation: true
-        });
+        const stats = await fetchStats(name, platform);
 
         /* A newer lookup started while this one was waiting: drop this result. */
         if (token !== lookupToken) return;
-
-        const stats = normaliseStats(raw);
-        if (!stats.player.name) throw ApiError('Player not found', 'notfound', 404);
 
         const profile = normaliseProfile(await profileRequest);
 
@@ -2673,6 +2767,9 @@ async function loadPlayer(name, platform) {
         $('bfResults').style.display = 'block';
         pushRecent(name, platform);
         updateUrl(name, platform);
+
+        /* Last, so the second lookup can never hold up the first player's page. */
+        scheduleCompare(stats, platform);
     } catch (err) {
         /* A stale error from a lookup the visitor has already replaced. */
         if (token !== lookupToken) return;
@@ -2688,6 +2785,169 @@ async function loadPlayer(name, platform) {
             setLoading(false);
         }
     }
+}
+
+/* --------------------- SECOND PLAYER (HEAD TO HEAD) --------------------- */
+
+/* Rows for the head-to-head table. `better` is deliberately explicit per row:
+   a blanket rule would mark the player with more kills as the better player,
+   which is wrong - more kills usually just means more matches played. */
+const COMPARE_STATS = [
+    { label: 'K/D', pick: (s) => s.core.killDeath, fmt: fmtNum, better: 'higher' },
+    { label: 'Accuracy', pick: (s) => s.core.accuracy, fmt: fmtPct, better: 'higher' },
+    { label: 'Headshot rate', pick: (s) => s.core.headshotPercent, fmt: fmtPct, better: 'higher' },
+    { label: 'Win rate', pick: (s) => s.core.winPercent, fmt: fmtPct, better: 'higher' },
+    { label: 'Kills / min', pick: (s) => s.core.killsPerMinute, fmt: fmtNum, better: 'higher' },
+    { label: 'Damage / min', pick: (s) => s.core.damagePerMinute, fmt: fmtInt, better: 'higher' },
+    { label: 'Revives / match', pick: (s) => toNum(s.core.revives) / matchesOf(s), fmt: fmtNum, better: 'higher' },
+    { label: 'Objective time / match', pick: (s) => objectiveSeconds(s) / matchesOf(s), fmt: fmtDuration, better: 'higher' },
+    { label: 'Kills', pick: (s) => s.core.kills, fmt: fmtInt, better: 'volume' },
+    { label: 'Deaths', pick: (s) => s.core.deaths, fmt: fmtInt, better: 'volume' },
+    { label: 'Matches played', pick: (s) => s.core.matchesPlayed, fmt: fmtInt, better: 'volume' },
+    { label: 'Score', pick: (s) => s.core.score, fmt: fmtInt, better: 'volume' }
+];
+
+let compareToken = 0;
+
+function comparePanel() {
+    return $('bfComparePanel');
+}
+
+function compareNotice() {
+    return $('bfCompareNotice');
+}
+
+/* Empties the chart and the table without touching the panel itself. The panel
+   owns these nodes permanently and renderers resolve them by id, so clearing
+   the whole panel would leave every one of those lookups null and the render
+   would silently produce nothing. */
+function resetCompareBody() {
+    clear($('bfCompareTable'));
+    const svg = $('bfCompareRadarSvg');
+    if (svg) clear(svg);
+    const legend = $('bfCompareRadarLegend');
+    if (legend) {
+        clear(legend);
+        legend.classList.remove('is-compare');
+    }
+    clear(compareNotice());
+}
+
+function clearCompare() {
+    const panel = comparePanel();
+    if (!panel) return;
+    panel.style.display = 'none';
+    resetCompareBody();
+}
+
+/* Runs only after the main player has finished rendering, so a slow second
+   lookup can never delay the page the visitor actually asked for. */
+function scheduleCompare(baseStats, basePlatform) {
+    if (!comparePanel()) return;
+
+    const input = $('bfCompareInput');
+    const vsName = input ? input.value.trim() : '';
+    if (!vsName) { clearCompare(); return; }
+
+    const vsSel = $('bfComparePlatform');
+    loadCompare(vsName, vsSel ? vsSel.value : basePlatform, baseStats, basePlatform);
+}
+
+/* Failures here are reported inside the comparison panel and nowhere else: a
+   mistyped second name must never disturb the main results, which are still
+   valid and still the ones the visitor came for. */
+async function loadCompare(vsName, vsPlatform, baseStats, basePlatform) {
+    const token = ++compareToken;
+    const panel = comparePanel();
+    const notice = compareNotice();
+    if (!panel || !notice) return;
+
+    panel.style.display = '';
+    resetCompareBody();
+    notice.appendChild(el('div', { class: 'bf-muted', text: 'Loading ' + vsName + '…' }));
+
+    try {
+        const other = await fetchStats(vsName, vsPlatform);
+        if (token !== compareToken) return;
+        renderCompare(baseStats, basePlatform, other, vsPlatform);
+    } catch (err) {
+        if (token !== compareToken) return;
+        const info = describeError(err);
+        resetCompareBody();
+        notice.appendChild(el('div', { class: 'bf-status error' }, [
+            el('strong', { text: 'Could not load ' + vsName }),
+            el('span', { class: 'bf-status-hint', text: info.hint })
+        ]));
+        console.error('BF6 comparison lookup failed:', err);
+    }
+}
+
+function renderCompare(baseStats, basePlatform, otherStats, otherPlatform) {
+    const panel = comparePanel();
+    if (!panel) return;
+
+    /* The loading / error slot has done its job. */
+    clear(compareNotice());
+
+    const aName = baseStats.player.name;
+    const bName = otherStats.player.name;
+
+    const count = $('bfCompareCount');
+    if (count) {
+        count.textContent = aName + ' (' + basePlatform + ')  vs  ' + bName + ' (' + otherPlatform + ')';
+    }
+
+    /* Identical axes and identical ceilings to the single-player radar, so the
+       overlay compares like with like instead of two differently scaled shapes. */
+    drawRadar($('bfCompareRadarSvg'), $('bfCompareRadarLegend'),
+        radarAxes(baseStats), radarAxes(otherStats), aName, bName);
+
+    const host = $('bfCompareTable');
+    if (!host) return;
+    clear(host);
+
+    const rows = [];
+    COMPARE_STATS.forEach((spec) => {
+        const av = toNum(spec.pick(baseStats));
+        const bv = toNum(spec.pick(otherStats));
+        const diff = bv - av;
+        const lead = (spec.better === 'higher' && Math.abs(diff) > 1e-9) ? (diff > 0 ? 'b' : 'a') : null;
+
+        const sign = diff > 0 ? '+' : (diff < 0 ? '\u2212' : '');
+        const delta = Math.abs(diff) < 1e-9 ? '\u00b7' : sign + spec.fmt(Math.abs(diff));
+
+        rows.push(el('tr', {}, [
+            el('td', {}, [
+                el('span', { class: 'bf-compare-label', text: spec.label }),
+                spec.better === 'volume' ? el('span', { class: 'bf-compare-tag', text: 'volume' }) : null
+            ]),
+            el('td', { class: 'bf-compare-cell' + (lead === 'a' ? ' good' : ''), text: spec.fmt(av) }),
+            el('td', { class: 'bf-compare-cell' + (lead === 'b' ? ' good' : ''), text: spec.fmt(bv) }),
+            el('td', { class: 'bf-compare-delta', text: delta })
+        ]));
+    });
+
+    host.appendChild(el('table', { class: 'bf-table bf-compare' }, [
+        el('thead', {}, [
+            el('tr', {}, [
+                el('th', { text: '' }),
+                el('th', { class: 'bf-compare-th-a', text: aName }),
+                el('th', { class: 'bf-compare-th-b', text: bName }),
+                el('th', { text: '\u0394' })
+            ])
+        ]),
+        el('tbody', {}, rows)
+    ]));
+
+    host.appendChild(el('p', {
+        class: 'bf-muted',
+        style: 'margin-top:14px;',
+        text: 'The green cell is the leader on rows where higher is genuinely better. Kills, deaths, ' +
+            'matches played and score are volume — a player who has played three times as many matches will ' +
+            'have more of them — so they are shown for context and never counted as a win. Δ is the second ' +
+            'player minus the first, in the units of that row, so the accuracy and headshot deltas are ' +
+            'percentage points.'
+    }));
 }
 
 async function loadSeason() {
@@ -2755,8 +3015,18 @@ function wireTrendToggle() {
     });
 }
 
+/* The second player's platform follows the first player's, until the visitor
+   picks one themselves - after that it must stop moving under their hands. */
+function mirrorComparePlatform() {
+    const main = $('bfPlatformSelect');
+    const vs = $('bfComparePlatform');
+    if (!main || !vs || vs.dataset.touched) return;
+    vs.value = main.value;
+}
+
 function init() {
     populatePlatforms();
+    populatePlatforms($('bfComparePlatform'));
     wireActivityToggle();
     wireTrendToggle();
 
@@ -2775,7 +3045,14 @@ function init() {
         syncSaveButton();
     });
     $('bfNameInput').addEventListener('input', syncSaveButton);
-    $('bfPlatformSelect').addEventListener('change', syncSaveButton);
+    $('bfPlatformSelect').addEventListener('change', () => {
+        syncSaveButton();
+        mirrorComparePlatform();
+    });
+    $('bfComparePlatform').addEventListener('change', () => {
+        const vs = $('bfComparePlatform');
+        if (vs) vs.dataset.touched = '1';
+    });
 
     renderRecent();
     renderSaved();
@@ -2783,6 +3060,18 @@ function init() {
     const query = readUrl() || DEFAULT_PLAYER;
     $('bfNameInput').value = query.name;
     ensurePlatformOption(query.platform);
+
+    /* A shared ?vs= link arrives with the second field already filled in. */
+    const vsInput = $('bfCompareInput');
+    const vsSel = $('bfComparePlatform');
+    if (vsInput) vsInput.value = query.vs || '';
+    if (query.vsplatform) {
+        ensurePlatformOption(query.vsplatform, vsSel);
+        if (vsSel) vsSel.dataset.touched = '1';
+    } else if (vsSel) {
+        vsSel.value = query.platform;
+    }
+
     syncSaveButton();
 
     /* Every request shares one global throttle queue, taken in the order it is

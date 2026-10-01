@@ -192,7 +192,7 @@
                     <li>Every "top N" toggle and the sortable table headers get their listeners.</li>
                     <li>The search form, the <strong>Save</strong> button and the clear links get their listeners.</li>
                     <li><code>renderRecent()</code> and <code>renderSaved()</code> paint the stored chips, so the page is useful before any request leaves the browser.</li>
-                    <li>The URL is read; if it carries a name, <code>loadPlayer()</code> is called.</li>
+                    <li>The URL is read; if it carries a name, <code>loadPlayer()</code> is called. A <code>&amp;vs=</code> parameter additionally fills the optional <em>Compare with</em> field, so a shared head-to-head link reopens itself.</li>
                     <li><code>loadSeason()</code> and <code>loadActivity()</code> run — both are player-independent. They are deliberately started <em>after</em> <code>loadPlayer()</code>: every request joins one global throttle queue in the order it is first awaited, so calling them first held slots 1 and 2 and pushed the stats request back to slot 4 — roughly three seconds of queueing before any network time had even started.</li>
                 </ol>
 
@@ -222,11 +222,42 @@
                  v
      pushRecent(name, platform) -> renderRecent()
      updateUrl(name, platform)              history.replaceState()
+                 |
+                 v
+     scheduleCompare(stats, platform)        only if "Compare with" is filled in
+                 |
+                 v
+     fetchStats(vsName, vsPlatform)          same helper, no profile request
+                 |
+                 v
+     renderCompare()                         overlay radar + head-to-head table
 </pre>
                 <p>
                     Profile and stats are requested together but the profile is <em>optional</em>: if it fails,
                     <code>loadPlayer()</code> still receives <code>null</code> and renders the statistics with the
                     identity panels showing empty states. A player always sees numbers rather than an error screen.
+                </p>
+                <p>
+                    <strong>Comparing two players.</strong> Filling the optional <em>Compare with</em> field makes
+                    <code>loadPlayer()</code> schedule a second lookup <em>after</em> the first player has finished
+                    rendering, so a slow second name can never hold up the page the visitor actually asked for. Both
+                    players go through the same <code>fetchStats()</code> helper and therefore share the throttle
+                    queue, the normalisation and the "no such player" rule.
+                </p>
+                <p>
+                    The comparison carries its own token and its own error surface. A mistyped second name is reported
+                    inside the head-to-head panel and changes nothing else: the first player's statistics are still
+                    valid and are still what the visitor came for. Starting a new search invalidates any comparison
+                    still in flight. Both platforms are separate dropdowns — the second defaults to the first but stops
+                    following as soon as the visitor picks one.
+                </p>
+                <p>
+                    <strong>Volume is not skill.</strong> The table marks a leader only on the eight rows where higher
+                    is genuinely better. Kills, deaths, matches played and score carry a <code>volume</code> tag and
+                    are never crowned, because a player with three times the matches has three times the kills:
+                    highlighting them would reward playtime rather than performance. The overlay reuses the radar's own
+                    eight axes and its own ceilings, so the two shapes are directly comparable rather than two
+                    differently scaled polygons.
                 </p>
 
                 <p>
@@ -352,6 +383,7 @@
                         <tr><td>XP split (donut)</td><td><code>renderXpDonut</code></td><td><code>bfXpDonutSvg</code></td><td>Total / performance / accolades XP — the API returns these as a one-element array <code>d.XP[0]</code></td></tr>
                         <tr><td>Kill types (donut)</td><td><code>renderKillTypeDonut</code></td><td><code>bfKillDonutSvg</code></td><td>The <code>KILL_LABELS</code> breakdown: infantry, vehicle, gadget, melee and so on</td></tr>
                         <tr><td>Performance profile (radar)</td><td><code>renderRadar</code></td><td><code>bfRadarSvg</code></td><td>Eight normalised core stats, listed below</td></tr>
+                        <tr><td>Head to head (overlay radar + table)</td><td><code>renderCompare</code></td><td><code>bfComparePanel</code>, <code>bfCompareRadarSvg</code>, <code>bfCompareTable</code></td><td>Two players on the identical eight axes and ceilings. Only rendered when the optional <em>Compare with</em> field is filled in</td></tr>
                         <tr><td>Class time (bars)</td><td><code>renderClassTime</code></td><td><code>bfClassTime</code></td><td><code>profile.kitTime</code> — the <code>tp_kit_*</code> profile fields</td></tr>
                         <tr><td>Mode time (bars)</td><td><code>renderModeTime</code></td><td><code>bfModeTime</code></td><td><code>tp_gm_*</code> per mode plus <code>tp_veh</code> in vehicles</td></tr>
                         <tr><td>Weapon class kills (bars)</td><td><code>renderWeaponClassKills</code></td><td><code>bfWeaponClassKills</code></td><td><code>kills_*_total</code> from the profile</td></tr>

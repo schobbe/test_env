@@ -20,6 +20,15 @@
     window.__mode = 'live';
     window.__delayName = null;
     window.__force404Name = null;
+    window.__scaleName = null;
+    window.__scaleAs = 'rival_9x7';
+    window.__scaleFactor = 1;
+
+    /* The core counters the head-to-head judges. matchesPlayed and the
+       objective block are deliberately left alone so the per-match rows stay
+       comparable between the two players. */
+    var SCALED_FIELDS = ['kills', 'deaths', 'accuracy', 'winPercent', 'killDeath',
+        'killsPerMinute', 'damagePerMinute', 'headshots', 'score', 'revives'];
 
     function delay(ms) {
         return new Promise(function (resolve) { setTimeout(resolve, ms); });
@@ -57,7 +66,29 @@
                     json: function () {
                         /* Deep copy: normaliseStats mutates nothing today, but a
                            shared object would let one scenario poison the next. */
-                        return Promise.resolve(JSON.parse(JSON.stringify(window.__BF6_FIXTURE)));
+                        var payload = JSON.parse(JSON.stringify(window.__BF6_FIXTURE));
+
+                        /* Serve a genuinely weaker second player, so the leader
+                           logic is exercised instead of comparing somebody with
+                           their own twin (where every delta would be zero). */
+                        if (window.__scaleName && u.indexOf('name=' + window.__scaleName) !== -1) {
+                            payload.userName = window.__scaleAs;
+                            SCALED_FIELDS.forEach(function (k) {
+                                /* Some of these arrive as JSON strings ("19.5"),
+                                   not numbers. normaliseStats runs everything
+                                   through toNum(), so parse the same way here
+                                   or the rival silently keeps A's accuracy,
+                                   headshot rate and win rate. */
+                                var n = typeof payload[k] === 'number' ? payload[k] : parseFloat(payload[k]);
+                                if (isFinite(n)) payload[k] = n * window.__scaleFactor;
+                            });
+                            if (payload.objective && payload.objective.time &&
+                                typeof payload.objective.time.total === 'number') {
+                                payload.objective.time.total =
+                                    payload.objective.time.total * window.__scaleFactor;
+                            }
+                        }
+                        return Promise.resolve(payload);
                     }
                 };
             }

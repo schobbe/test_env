@@ -195,6 +195,24 @@ a.chan-toggle[hidden] {
     box-shadow: 0 0 0 3px rgba(129, 140, 248, 0.15);
 }
 
+/* A full-width flex line, so the optional comparison fields start on their own
+   row instead of squeezing the main search inputs on a narrow screen. */
+.bf-search-row {
+    flex: 1 1 100%;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-end;
+    gap: 10px;
+    padding-top: 12px;
+    margin-top: 2px;
+    border-top: 1px dashed var(--bf-border);
+}
+
+.bf-compare-hint {
+    flex: 1 1 100%;
+    margin: 2px 0 0;
+}
+
 .bf-btn {
     background: var(--bf-accent-strong);
     color: #fff;
@@ -737,6 +755,71 @@ a.chan-toggle[hidden] {
     font-weight: 600;
     color: var(--bf-muted);
     opacity: 0.85;
+}
+
+/* Two-player radar legend: a fixed grid so the two value columns stay aligned
+   down the list instead of drifting with the length of each player name. */
+.bf-chart-legend.is-compare .bf-legend-item {
+    display: grid;
+    grid-template-columns: minmax(68px, 1fr) auto auto;
+    gap: 12px;
+    flex: 1 1 100%;
+    max-width: 420px;
+}
+
+/* ---------- Head to head ---------- */
+.bf-compare {
+    width: 100%;
+    margin-top: 4px;
+}
+
+.bf-compare th,
+.bf-compare td {
+    padding: 7px 10px;
+}
+
+.bf-compare th:first-child,
+.bf-compare td:first-child {
+    width: 44%;
+    text-align: left;
+}
+
+.bf-compare th:not(:first-child),
+.bf-compare td:not(:first-child) {
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+}
+
+.bf-compare-th-a { color: var(--bf-accent); }
+.bf-compare-th-b { color: #f59e0b; }
+
+.bf-compare-label {
+    font-weight: 600;
+}
+
+/* Marks a raw total as context rather than skill, so the table never implies
+   that the player with more matches won. */
+.bf-compare-tag {
+    display: inline-block;
+    margin-left: 7px;
+    padding: 1px 6px;
+    border-radius: 999px;
+    border: 1px solid var(--bf-border);
+    color: var(--bf-muted);
+    font-size: 0.68em;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    vertical-align: middle;
+}
+
+.bf-compare-cell.good {
+    color: #4ade80;
+    font-weight: 700;
+}
+
+.bf-compare-delta {
+    color: var(--bf-muted);
 }
 
 .bf-legend-swatch {
