@@ -191,8 +191,8 @@
                     <li>Every "top N" toggle and the sortable table headers get their listeners.</li>
                     <li>The search form, the <strong>Save</strong> button and the clear links get their listeners.</li>
                     <li><code>renderRecent()</code> and <code>renderSaved()</code> paint the stored chips, so the page is useful before any request leaves the browser.</li>
-                    <li><code>loadSeason()</code> and <code>loadActivity()</code> run — both are player-independent.</li>
-                    <li>The URL is read; if it carries a name, <code>loadPlayer()</code> is called immediately.</li>
+                    <li>The URL is read; if it carries a name, <code>loadPlayer()</code> is called.</li>
+                    <li><code>loadSeason()</code> and <code>loadActivity()</code> run — both are player-independent. They are deliberately started <em>after</em> <code>loadPlayer()</code>: every request joins one global throttle queue in the order it is first awaited, so calling them first held slots 1 and 2 and pushed the stats request back to slot 4 — roughly three seconds of queueing before any network time had even started.</li>
                 </ol>
 
                 <h3>5.2 The lookup pipeline</h3>
@@ -219,9 +219,6 @@
      recordSnapshot() -> renderTrend()       stores one row per lookup
                  |
                  v
-     loadSessions()  -> /manager/sessions/   hides itself if empty
-                 |
-                 v
      pushRecent(name, platform) -> renderRecent()
      updateUrl(name, platform)              history.replaceState()
 </pre>
@@ -229,6 +226,51 @@
                     Profile and stats are requested together but the profile is <em>optional</em>: if it fails,
                     <code>loadPlayer()</code> still receives <code>null</code> and renders the statistics with the
                     identity panels showing empty states. A player always sees numbers rather than an error screen.
+                </p>
+
+                <p>
+                    <strong>Concurrent lookups are serialised by a token.</strong> Every <code>loadPlayer()</code>
+                    increments <code>lookupToken</code> and keeps its own copy. The copy is re-checked after each
+                    <code>await</code>, and the <code>catch</code> and <code>finally</code> blocks only act when their
+                    copy is still the newest. Without it a slower, earlier search finishing last would repaint the page
+                    with the wrong player, and its <code>finally</code> would re-enable the search button while a newer
+                    lookup was still running. A lookup that passes four seconds also rewrites its button label to
+                    &ldquo;Still loading&hellip;&rdquo;, so a slow request never looks like a dead page.
+                </p>
+
+                <p>
+                    <strong>What stays on screen when a lookup fails</strong> depends on the kind of error, because
+                    <code>appState.showingPlayer</code> tracks whose numbers are rendered <em>and visible</em>. The
+                    older <code>appState.hasLoaded</code> flag could not express this: it was written once on the first
+                    success and never cleared, so every later failure — including a 404 — took the &ldquo;keep the old
+                    stats&rdquo; path and left a previous player's numbers sitting under a &ldquo;Player not
+                    found&rdquo; banner.
+                </p>
+                <table class="wiki-table">
+                    <thead><tr><th>Failure</th><th>What the visitor sees</th><th>Why</th></tr></thead>
+                    <tbody>
+                        <tr>
+                            <td><code>notfound</code> (404)</td>
+                            <td>The previous player's stats are <strong>hidden</strong> and <code>showingPlayer</code> is cleared.</td>
+                            <td>A 404 is a definitive answer about the name just typed. Someone else's numbers left under a &ldquo;Player not found&rdquo; banner read as if they belonged to that name.</td>
+                        </tr>
+                        <tr>
+                            <td><code>timeout</code>, <code>network</code>, <code>server</code></td>
+                            <td>The previous player's stats <strong>stay</strong>, plus a <code>#bfStaleNotice</code> banner naming whose they are.</td>
+                            <td>These say nothing about the data already on screen, so wiping the page on a flaky connection would be worse. The banner removes the ambiguity.</td>
+                        </tr>
+                        <tr>
+                            <td>any failure with nothing rendered</td>
+                            <td>Only the error status.</td>
+                            <td>There is no stale data to protect.</td>
+                        </tr>
+                    </tbody>
+                </table>
+                <p>
+                    <code>loadSessions()</code> is no longer called from <code>loadPlayer()</code>:
+                    <code>/manager/sessions/</code> carries no BF6 data, so it returned 404 on every lookup and simply
+                    burned a throttle slot that delayed the next search. Its panel markup remains in the page, hidden,
+                    in case that endpoint ever gains BF6 coverage.
                 </p>
 
                 <h3>5.3 Being polite to the API</h3>

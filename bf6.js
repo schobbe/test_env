@@ -184,11 +184,16 @@ let throttleChain = Promise.resolve();
 /* Serialised so concurrent apiGet calls queue up instead of all reading the
    same "last request" timestamp and firing together. */
 function throttle() {
-    throttleChain = throttleChain.then(async () => {
-        const wait = THROTTLE_MS - (Date.now() - lastRequestAt);
-        if (wait > 0) await sleep(wait);
-        lastRequestAt = Date.now();
-    });
+    /* `.catch` goes first so a rejected link can never survive inside the
+       chain: without it one failed request would poison every later lookup
+       until the page was reloaded. */
+    throttleChain = throttleChain
+        .catch(() => { /* recover; only the spacing below matters */ })
+        .then(async () => {
+            const wait = THROTTLE_MS - (Date.now() - lastRequestAt);
+            if (wait > 0) await sleep(wait);
+            lastRequestAt = Date.now();
+        });
     return throttleChain;
 }
 
@@ -219,7 +224,14 @@ async function apiGet(path, params) {
     let lastError = null;
 
     for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
-        await throttle();
+        /* The queue wait sits inside a guard so that even a failure there
+           surfaces as a describable ApiError rather than escaping apiGet. */
+        try {
+            await throttle();
+        } catch (e) {
+            lastError = ApiError('Request queue failed', 'unknown', 0);
+            continue;
+        }
 
         const controller = new AbortController();
         const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
@@ -2473,7 +2485,11 @@ const appState = {
     seasonLabel: '',
     activityDays: 7,
     trendMetric: 'kd',
-    hasLoaded: false,
+    /* Name of the player whose stats are rendered AND visible, or null when the
+       results area is empty. Lets error handling tell "nothing on screen" apart
+       from "still showing a previous player" - the old write-once `hasLoaded`
+       flag could not, which is why a failed search left stale stats in place. */
+    showingPlayer: null,
     lastStats: null,
     lastProfile: null,
     lastQuery: null
@@ -2513,9 +2529,64 @@ function ensurePlatformOption(platform) {
 
 /* ------------------------------- LOADERS ------------------------------- */
 
+/* Monotonic token for loadPlayer. Only the newest lookup may touch the page:
+   without it a slower, earlier search resolving last would overwrite - or
+   clear - the result the visitor actually asked for. */
+let lookupToken = 0;
+let loadingTimer = null;
+
+/* A slow request must not look like a dead page, so after a few seconds the
+   button says so instead of sitting on "Loading". */
+function startLoadingNudge(token) {
+    clearTimeout(loadingTimer);
+    loadingTimer = setTimeout(() => {
+        if (token === lookupToken) setLoading(true, 'Still loading…');
+    }, 4000);
+}
+
+/* Whose numbers stay on screen after a failed lookup.
+   A 404 is a definitive answer about the player just requested, so anything
+   still rendered belongs to somebody else and must go. A timeout, network or
+   server error says nothing about the data already shown, so it stays - but the
+   notice names the player it actually belongs to. */
+function applyLookupError(err, queriedName) {
+    const results = $('bfResults');
+    const shown = appState.showingPlayer;
+    const definitive = Boolean(err && err.kind === 'notfound');
+
+    if (definitive || !shown) {
+        if (results) results.style.display = 'none';
+        appState.showingPlayer = null;
+        setStaleNotice(null);
+        return;
+    }
+    if (results) results.style.display = 'block';
+    setStaleNotice(shown, queriedName);
+}
+
+/* Transient-failure banner: the stats below are valid, just not for the query. */
+function setStaleNotice(shownName, queriedName) {
+    const node = $('bfStaleNotice');
+    if (!node) return;
+    clear(node);
+    if (!shownName) return;
+    node.appendChild(el('div', { class: 'bf-status warn' }, [
+        el('strong', { text: 'Showing results for ' + shownName }),
+        el('span', {
+            class: 'bf-status-hint',
+            text: 'The lookup for "' + (queriedName || '') +
+                '" did not complete, so the statistics below were not refreshed and still belong to ' +
+                shownName + '.'
+        })
+    ]));
+}
+
 async function loadPlayer(name, platform) {
+    const token = ++lookupToken;
     setStatus(null);
+    setStaleNotice(null);
     setLoading(true, 'Loading');
+    startLoadingNudge(token);
 
     try {
         /* The profile endpoint is a bonus: if it 404s the main stats must
@@ -2532,17 +2603,22 @@ async function loadPlayer(name, platform) {
             seperation: true
         });
 
+        /* A newer lookup started while this one was waiting: drop this result. */
+        if (token !== lookupToken) return;
+
         const stats = normaliseStats(raw);
         if (!stats.player.name) throw ApiError('Player not found', 'notfound', 404);
 
         const profile = normaliseProfile(await profileRequest);
+
+        /* Re-check: awaiting the profile gave another lookup a chance to start. */
+        if (token !== lookupToken) return;
 
         appState.name = stats.player.name;
         appState.platform = platform;
         appState.lastStats = stats;
         appState.lastProfile = profile;
         appState.lastQuery = { name: name, platform: platform };
-        appState.hasLoaded = true;
 
         renderIdentity(stats, appState.lastQuery);
         syncSaveButton();
@@ -2573,22 +2649,32 @@ async function loadPlayer(name, platform) {
         renderVehicles(stats);
         renderGadgets(stats);
         renderMelee(stats);
-        loadSessions(stats.player.name, platform);
+        /* loadSessions() is not called: /manager/sessions/ has no BF6 data, so
+           it always 404'd and only burned a throttle slot on every lookup.
+           The bfSessionsPanel markup stays hidden until that ever changes. */
 
         const modeLabel = $('bfCareerMode');
         if (modeLabel) modeLabel.textContent = 'multiplayer · all seasons';
 
+        setStaleNotice(null);
+        appState.showingPlayer = stats.player.name;
         $('bfResults').style.display = 'block';
         pushRecent(name, platform);
         updateUrl(name, platform);
     } catch (err) {
+        /* A stale error from a lookup the visitor has already replaced. */
+        if (token !== lookupToken) return;
         const info = describeError(err);
         setStatus('error', info.title, info.hint);
-        /* Keep already-rendered stats on screen so a typo does not wipe the page. */
-        if (!appState.hasLoaded) $('bfResults').style.display = 'none';
+        applyLookupError(err, name);
         console.error('BF6 stats lookup failed:', err);
     } finally {
-        setLoading(false);
+        /* Only the live lookup may stop the spinner - an earlier one finishing
+           late would otherwise re-enable the button in the middle of a search. */
+        if (token === lookupToken) {
+            clearTimeout(loadingTimer);
+            setLoading(false);
+        }
     }
 }
 
@@ -2682,15 +2768,19 @@ function init() {
     renderRecent();
     renderSaved();
 
-    /* Player-independent live panels load alongside the first lookup. */
-    loadSeason();
-    loadActivity(appState.activityDays);
-
     const query = readUrl() || DEFAULT_PLAYER;
     $('bfNameInput').value = query.name;
     ensurePlatformOption(query.platform);
     syncSaveButton();
+
+    /* Every request shares one global throttle queue, taken in the order it is
+       first awaited. Calling loadPlayer first therefore reserves slots 1-2 for
+       profile and stats; previously the season and activity panels held those
+       and the stats request did not start until ~3s in, before any network
+       time. They still load, just behind the thing the visitor waits for. */
     loadPlayer(query.name, query.platform);
+    loadSeason();
+    loadActivity(appState.activityDays);
 }
 
 init();
