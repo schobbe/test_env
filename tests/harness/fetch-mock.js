@@ -23,12 +23,19 @@
     window.__scaleName = null;
     window.__scaleAs = 'rival_9x7';
     window.__scaleFactor = 1;
+    window.__dropClassName = null;    /* remove this class from the scaled player */
+    window.__addClassName = null;     /* give it a class the other player lacks */
 
     /* The core counters the head-to-head judges. matchesPlayed and the
        objective block are deliberately left alone so the per-match rows stay
        comparable between the two players. */
     var SCALED_FIELDS = ['kills', 'deaths', 'accuracy', 'winPercent', 'killDeath',
         'killsPerMinute', 'damagePerMinute', 'headshots', 'score', 'revives'];
+
+    /* Per-class counters, scaled so the rival's class performance genuinely
+       differs rather than mirroring player A's rows exactly. */
+    var CLASS_FIELDS = ['kills', 'killDeath', 'kpm', 'spawns', 'secondsPlayed',
+        'assists', 'revives', 'score'];
 
     function delay(ms) {
         return new Promise(function (resolve) { setTimeout(resolve, ms); });
@@ -86,6 +93,44 @@
                                 typeof payload.objective.time.total === 'number') {
                                 payload.objective.time.total =
                                     payload.objective.time.total * window.__scaleFactor;
+                            }
+
+                            /* Class rows, rewritten so the rival has a
+                               genuinely different class profile. Without this
+                               the per-class comparison would be tested against
+                               two identical sets of rows. */
+                            if (Array.isArray(payload.classes)) {
+                                var drop = window.__dropClassName
+                                    ? String(window.__dropClassName).toLowerCase() : null;
+                                var kept = [];
+
+                                payload.classes.forEach(function (row) {
+                                    if (drop && String(row.className).toLowerCase() === drop) return;
+                                    var copy = {};
+                                    Object.keys(row).forEach(function (k) {
+                                        var raw = row[k];
+                                        var n = typeof raw === 'number' ? raw : parseFloat(raw);
+                                        if (CLASS_FIELDS.indexOf(k) !== -1 && isFinite(n)) {
+                                            copy[k] = n * window.__scaleFactor;
+                                        } else {
+                                            copy[k] = raw;
+                                        }
+                                    });
+                                    kept.push(copy);
+                                });
+
+                                /* A class the other player has no record of, so
+                                   the union in the UI is exercised in both
+                                   directions rather than just "A has more". */
+                                if (window.__addClassName) {
+                                    kept.push({
+                                        className: window.__addClassName,
+                                        kills: 40, killDeath: 1.10, kpm: 0.50,
+                                        spawns: 30, secondsPlayed: 4800,
+                                        assists: 5, revives: 1, score: 9000
+                                    });
+                                }
+                                payload.classes = kept;
                             }
                         }
                         return Promise.resolve(payload);

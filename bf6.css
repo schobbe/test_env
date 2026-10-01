@@ -873,6 +873,50 @@ body.bf6-page {
     color: var(--bf-muted);
 }
 
+/* Player A / B bar variants, matching the overlay radar's RADAR_COLOR_A/B
+   exactly so the class-mix bars and the radar read as one system. */
+.bf-bar-fill.a {
+    background: linear-gradient(90deg, #4f46e5, #818cf8);
+}
+
+.bf-bar-fill.b {
+    background: linear-gradient(90deg, #b45309, #fbbf24);
+}
+
+.bf-compare-subhead {
+    margin: 20px 0 6px;
+    font-size: 0.78em;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--bf-muted);
+}
+
+.bf-compare-subhead:first-child {
+    margin-top: 0;
+}
+
+/* Names the two bar colours, since the mix rows are labelled with player names
+   rather than A/B and would otherwise be ambiguous at a glance. */
+.bf-compare-key {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 14px;
+    margin-bottom: 4px;
+    font-size: 0.8em;
+    font-weight: 600;
+}
+
+.bf-compare-key-a { color: #818cf8; }
+.bf-compare-key-b { color: #fbbf24; }
+
+/* A class the player has no record of. Muted, so a dash is never mistaken for
+   a genuine zero. */
+.bf-compare-cell.absent {
+    color: var(--bf-muted);
+    opacity: 0.55;
+}
+
 .bf-legend-swatch {
     display: inline-block;
     width: 10px;

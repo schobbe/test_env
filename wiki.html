@@ -254,7 +254,12 @@
                     <strong>Volume is not skill.</strong> The table marks a leader only on the eight rows where higher
                     is genuinely better. Kills, deaths, matches played and score carry a <code>volume</code> tag and
                     are never crowned, because a player with three times the matches has three times the kills:
-                    highlighting them would reward playtime rather than performance. The overlay reuses the radar's own
+                    highlighting them would reward playtime rather than performance. The same rule governs the per-class block,
+                    which is why it compares each player's <em>share of their own kills</em> per class and then
+                    K/D and KPM — the shares describe playstyle, the rates describe performance, and raw kills
+                    per class are never shown side by side because the player with more matches would win every
+                    row before performance entered into it. A dash in that table means the player has no record of
+                    that class at all, and a row containing a dash is never crowned. The overlay reuses the radar's own
                     eight axes and its own ceilings, so the two shapes are directly comparable rather than two
                     differently scaled polygons.
                 </p>
@@ -382,6 +387,7 @@
                         <tr><td>XP split (donut)</td><td><code>renderXpDonut</code></td><td><code>bfXpDonutSvg</code></td><td>Total / performance / accolades XP — the API returns these as a one-element array <code>d.XP[0]</code></td></tr>
                         <tr><td>Kill types (donut)</td><td><code>renderKillTypeDonut</code></td><td><code>bfKillDonutSvg</code></td><td>The <code>KILL_LABELS</code> breakdown: infantry, vehicle, gadget, melee and so on</td></tr>
                         <tr><td>Performance profile (radar)</td><td><code>renderRadar</code></td><td><code>bfRadarSvg</code></td><td>Eight normalised core stats, listed below</td></tr>
+                        <tr><td>Per-class comparison (mix bars + table)</td><td>renderClassCompare</td><td><code>bfCompareClasses</code></td><td>The <em>union</em> of both players' classes, so a class only one of them has touched still appears. Mix bars are each player's share of their <em>own</em> class kills, which is playstyle; K/D and KPM are rates and stand up between players with very different match counts. Raw kills per class are deliberately never compared.</td></tr>
                         <tr><td>Head to head (overlay radar + table)</td><td><code>renderCompare</code></td><td><code>bfComparePanel</code>, <code>bfCompareRadarSvg</code>, <code>bfCompareTable</code></td><td>Two players on the identical eight axes and ceilings. Only rendered when the optional <em>Compare with</em> field is filled in</td></tr>
                         <tr><td>Class time (bars)</td><td><code>renderClassTime</code></td><td><code>bfClassTime</code></td><td><code>profile.kitTime</code> — the <code>tp_kit_*</code> profile fields</td></tr>
                         <tr><td>Mode time (bars)</td><td><code>renderModeTime</code></td><td><code>bfModeTime</code></td><td><code>tp_gm_*</code> per mode plus <code>tp_veh</code> in vehicles</td></tr>

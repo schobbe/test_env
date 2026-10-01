@@ -2823,6 +2823,7 @@ function compareNotice() {
    would silently produce nothing. */
 function resetCompareBody() {
     clear($('bfCompareTable'));
+    clear($('bfCompareClasses'));
     const svg = $('bfCompareRadarSvg');
     if (svg) clear(svg);
     const legend = $('bfCompareRadarLegend');
@@ -2882,6 +2883,134 @@ async function loadCompare(vsName, vsPlatform, baseStats, basePlatform) {
     }
 }
 
+/* ----------------------- PER-CLASS COMPARISON --------------------------- */
+
+/* Class rows keyed by name. Deliberately a union of both players: a class only
+   one of them has touched is precisely the difference worth seeing, so it
+   stays in the table with the other player's columns showing a dash. */
+function classIndex(stats) {
+    const out = {};
+    (stats.classes || []).forEach((row) => {
+        const name = labelOf(row, 'className');
+        if (name && name !== '-') out[name] = row;
+    });
+    return out;
+}
+
+/* Share of this player's own class kills, or null when it cannot be computed.
+   A class they have played but scored nothing in must not become NaN %, and a
+   player with no class data at all must not divide by zero. */
+function classShare(row, totalKills) {
+    if (!row || totalKills <= 0) return null;
+    return toNum(row.kills) / totalKills;
+}
+
+function classKillTotal(index) {
+    return Object.keys(index).reduce((sum, name) => sum + toNum(index[name].kills), 0);
+}
+
+function renderClassCompare(host, baseStats, otherStats, aName, bName) {
+    if (!host) return;
+    clear(host);
+
+    const a = classIndex(baseStats);
+    const b = classIndex(otherStats);
+    const names = Object.keys(a).concat(Object.keys(b).filter((n) => !(n in a)));
+
+    if (!names.length) {
+        host.appendChild(el('div', { class: 'bf-muted', text: 'Neither player has per-class data recorded.' }));
+        return;
+    }
+
+    /* The classes they actually play sit at the top. */
+    const combined = (n) => toNum((a[n] || {}).kills) + toNum((b[n] || {}).kills);
+    names.sort((x, y) => combined(y) - combined(x));
+
+    const aTotal = classKillTotal(a);
+    const bTotal = classKillTotal(b);
+
+    /* ---- 1. Class mix: playstyle ---- */
+    host.appendChild(el('div', {
+        class: 'bf-compare-subhead',
+        text: 'Class mix — share of each player’s own kills'
+    }));
+    host.appendChild(el('div', { class: 'bf-compare-key' }, [
+        el('span', { class: 'bf-compare-key-a', text: aName }),
+        el('span', { class: 'bf-compare-key-b', text: bName })
+    ]));
+
+    names.forEach((name) => {
+        const aShare = classShare(a[name], aTotal);
+        const bShare = classShare(b[name], bTotal);
+
+        host.appendChild(el('div', { class: 'bf-bar-subhead' }, [
+            el('span', { text: name }),
+            el('span', { class: 'bf-muted', text: fmtInt(combined(name)) + ' kills between them' })
+        ]));
+
+        host.appendChild(barRow(aName, aShare === null ? 0 : aShare * 100, 100,
+            aShare === null ? '—' : (aShare * 100).toFixed(1) + '%  ·  ' + fmtInt(a[name].kills) + ' kills', 'a'));
+        host.appendChild(barRow(bName, bShare === null ? 0 : bShare * 100, 100,
+            bShare === null ? '—' : (bShare * 100).toFixed(1) + '%  ·  ' + fmtInt(b[name].kills) + ' kills', 'b'));
+    });
+
+    /* ---- 2. Per-class performance: rates, so they survive unequal match counts ---- */
+    host.appendChild(el('div', {
+        class: 'bf-compare-subhead',
+        style: 'margin-top:20px;',
+        text: 'Per class — K/D and kills per minute'
+    }));
+
+    /* Both metrics are higher-is-better, so one rule serves both columns: a cell
+       is highlighted only when its own value is strictly greater than the
+       other player's. Testing merely for "the values differ" highlighted the
+       loser too; a direction flag per column is what first hid that. */
+    const cell = (value, other) => {
+        if (value === null) return el('td', { class: 'bf-compare-cell absent', text: '\u2014' });
+        const leads = other !== null && Math.abs(value - other) > 1e-9 && value > other;
+        return el('td', { class: 'bf-compare-cell' + (leads ? ' good' : ''), text: fmtNum(value) });
+    };
+
+    const rows = names.map((name) => {
+        const ca = a[name] || null;
+        const cb = b[name] || null;
+        const kdA = ca ? toNum(ca.killDeath) : null;
+        const kdB = cb ? toNum(cb.killDeath) : null;
+        const kpmA = ca ? toNum(ca.kpm) : null;
+        const kpmB = cb ? toNum(cb.kpm) : null;
+
+        return el('tr', {}, [
+            el('td', {}, [el('span', { class: 'bf-compare-label', text: name })]),
+            cell(kdA, kdB), cell(kdB, kdA),
+            cell(kpmA, kpmB), cell(kpmB, kpmA)
+        ]);
+    });
+
+    host.appendChild(el('table', { class: 'bf-table bf-compare bf-compare-classes' }, [
+        el('thead', {}, [
+            el('tr', {}, [
+                el('th', { text: 'Class' }),
+                el('th', { class: 'bf-compare-th-a', text: aName + ' K/D' }),
+                el('th', { class: 'bf-compare-th-b', text: bName + ' K/D' }),
+                el('th', { class: 'bf-compare-th-a', text: aName + ' KPM' }),
+                el('th', { class: 'bf-compare-th-b', text: bName + ' KPM' })
+            ])
+        ]),
+        el('tbody', {}, rows)
+    ]));
+
+    host.appendChild(el('p', {
+        class: 'bf-muted',
+        style: 'margin-top:14px;',
+        text: 'The mix bars are each player’s share of their own class kills, so they describe playstyle ' +
+            'rather than size — a support main and an assault main can both read 100% of a different row. ' +
+            'K/D and KPM are rates, so unlike raw kills they stand up between players who have played very ' +
+            'different numbers of matches; raw kills per class are deliberately not compared, because the ' +
+            'player with more matches would win every row before performance entered into it. A dash means ' +
+            'that player has no record of that class at all.'
+    }));
+}
+
 function renderCompare(baseStats, basePlatform, otherStats, otherPlatform) {
     const panel = comparePanel();
     if (!panel) return;
@@ -2901,6 +3030,10 @@ function renderCompare(baseStats, basePlatform, otherStats, otherPlatform) {
        overlay compares like with like instead of two differently scaled shapes. */
     drawRadar($('bfCompareRadarSvg'), $('bfCompareRadarLegend'),
         radarAxes(baseStats), radarAxes(otherStats), aName, bName);
+
+    /* Before the early return below: the class block is independent of the
+       head-to-head table and must survive one of the two being absent. */
+    renderClassCompare($('bfCompareClasses'), baseStats, otherStats, aName, bName);
 
     const host = $('bfCompareTable');
     if (!host) return;

@@ -133,6 +133,10 @@
             window.__scaleName = 'vs_rival_9x7';
             window.__scaleAs = 'rival_9x7';
             window.__scaleFactor = 0.5;   /* the rival is deliberately weaker */
+            /* Asymmetric class profile, so the union is exercised in both
+               directions: the rival has no Recon row and gains a Sniper one. */
+            window.__dropClassName = 'Recon';
+            window.__addClassName = 'Sniper';
 
             var vsInput = $('bfCompareInput');
             ok('S6 compare field exists', Boolean(vsInput), 'no #bfCompareInput');
@@ -172,6 +176,34 @@
                 document.querySelectorAll('#bfCompareTable td.good').length + ' leaders, ' +
                 winsForRival + ' of them handed to the weaker player');
             ok('S6 volume rows are never crowned', volumeWins === 0, volumeWins + ' volume leaders');
+
+            /* --- S8: the per-class comparison --- */
+            var classRows = document.querySelectorAll('#bfCompareClasses .bf-compare-classes tbody tr');
+            var mixHeads = document.querySelectorAll('#bfCompareClasses .bf-bar-subhead');
+            var barsA = document.querySelectorAll('#bfCompareClasses .bf-bar-fill.a');
+            var barsB = document.querySelectorAll('#bfCompareClasses .bf-bar-fill.b');
+            var absent = document.querySelectorAll('#bfCompareClasses .bf-compare-cell.absent');
+            var leaders = document.querySelectorAll('#bfCompareClasses .bf-compare-classes td.good');
+
+            ok('S8 the class table is the union of both class lists',
+                classRows.length === 5,
+                String(classRows.length) + ' rows (A has 4; the rival drops Recon and gains Sniper)');
+            ok('S8 the mix draws one bar per player per class',
+                mixHeads.length === 5 && barsA.length === 5 && barsB.length === 5,
+                mixHeads.length + ' classes, ' + barsA.length + ' A bars, ' + barsB.length + ' B bars');
+            ok('S8 a class only one player has is shown rather than dropped',
+                absent.length === 4,
+                absent.length + ' absent cells (Recon missing from one player, Sniper from the other)');
+            ok('S8 a row containing a dash crowns nobody',
+                Array.prototype.every.call(classRows, function (tr) {
+                    var missing = tr.querySelectorAll('.bf-compare-cell.absent').length > 0;
+                    return !missing || !tr.querySelector('td.good');
+                }), 'some row with a dash also carries a leader');
+            ok('S8 leaders land on the stronger player',
+                leaders.length === 6, leaders.length + ' leader cells');
+            ok('S8 the played-but-unscored class renders instead of NaN',
+                !/NaN/.test(flat(txt('bfCompareClasses'))) && flat(txt('bfCompareClasses')).length > 0,
+                /NaN/.test(flat(txt('bfCompareClasses'))) ? 'NaN found in the class block' : 'no NaN');
 
             /* --- S7: a bad second name must not disturb the main player --- */
             window.__force404Name = 'zzz_missing_9x7';

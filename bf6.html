@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>BF6 Player Stats</title>
-    <link rel="stylesheet" href="bf6.css?v=7">
+    <link rel="stylesheet" href="bf6.css?v=8">
 </head>
 <body class="bf6-page">
     <!-- Top bar -->
@@ -120,6 +120,12 @@
                         </div>
                         <div id="bfCompareTable"></div>
                     </div>
+
+                    <!-- Per-class comparison: playstyle mix, then K/D and KPM.
+                         Same reasoning as the table above - shares describe
+                         playstyle, rates describe performance, raw kills are
+                         volume and are never treated as a win. -->
+                    <div id="bfCompareClasses"></div>
                 </div>
             </div>
 
@@ -479,7 +485,7 @@
         </div>
     </div>
 
-    <script src="bf6.js?v=6"></script>
+    <script src="bf6.js?v=8"></script>
     <script>
         /* Stable <-> beta channel switch. Every link in this site is relative,
            so the same page exists one directory up (stable) or one down (beta)
