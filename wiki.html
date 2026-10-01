@@ -590,19 +590,41 @@ python -m http.server 8500
                     wrong.
                 </p>
                 <p>
-                    <strong>Deploying by hand.</strong> Settings → Pages must be set to <em>GitHub Actions</em>.
-                    Pushing to <code>main</code> or <code>beta</code> deploys automatically, and the workflow also
-                    carries a manual <em>Run workflow</em> trigger — the quickest way to force a redeploy without
-                    committing anything.
+                    <strong>Deploying by hand.</strong> Pushing to <code>main</code> or <code>beta</code> deploys
+                    automatically, and the workflow also carries a manual <em>Run workflow</em> trigger — the
+                    quickest way to force a redeploy without committing anything. Two repository settings have to
+                    be right before either works, and they mask each other:
+                </p>
+                <ol class="wiki-list">
+                    <li>
+                        <strong>Settings → Pages → Source = <em>GitHub Actions</em>.</strong> While this still says
+                        <em>Deploy from a branch</em>, branch deployments keep winning and nothing from this workflow
+                        is ever served, however green it goes.
+                    </li>
+                    <li>
+                        <strong>Settings → Environments → <code>github-pages</code> → Deployment branches and tags:
+                        allow <code>beta</code>.</strong> <code>actions/deploy-pages</code> deploys through the
+                        <code>github-pages</code> environment, GitHub creates that environment protected, and by
+                        default it permits only the Pages source branch. This is the one that blocks a
+                        <code>beta</code> push.
+                    </li>
+                </ol>
+                <p>
+                    The order matters, and getting it wrong is genuinely confusing. Environment protection rules
+                    <em>take precedence over</em> the source-branch rule, so a run from <code>beta</code> is refused
+                    at the second setting long before it ever reaches the first — which makes the source setting
+                    look innocent. Fix the environment first and the run goes green <em>without changing a single
+                    byte of the live site</em>, because the deployment it would have replaced was never live anyway.
+                    Both have to be right.
                 </p>
                 <p>
-                    <strong>What "deploy rejected" looks like.</strong> That setting is not a formality. While Pages
-                    is still pointed at a source branch, GitHub refuses any deployment originating from a different
-                    one, and it refuses it <em>before the job starts</em>: the <code>deploy</code> job reports
-                    <code>failure</code> with an empty <code>steps</code> array and no runner, while <code>build</code>
-                    sits there green. Nothing in the workflow is wrong; the fix is the setting. A run pushed from
-                    <code>main</code> will pass in the meantime, which makes the failure look intermittent rather
-                    than systematic.
+                    <strong>What the rejection looks like.</strong> It happens <em>before the job starts</em>: the
+                    <code>deploy</code> job reports <code>failure</code> with an empty <code>steps</code> array and
+                    no runner, while <code>build</code> sits there green having uploaded a perfectly good artifact.
+                    Nothing in the workflow can catch it, because nothing in the workflow runs — so the build job
+                    emits its own warning annotation on every <code>beta</code> push, naming the setting to change.
+                    A run from <code>main</code> succeeds throughout, which makes the whole thing look
+                    intermittent rather than systematic.
                 </p>
             </section>
 

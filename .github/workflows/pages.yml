@@ -3,7 +3,7 @@ name: Deploy site to GitHub Pages
 # Publishes a composite tree:
 #
 #   main -> /        stable
-#   beta -> /beta/   preview, reached through the nav toggle
+#   beta -> /beta/   preview, reached through the switch on the BF6 page
 #
 # dev is deliberately never published: it is where work-in-progress lives and
 # is free to be broken. Promotion is always an explicit merge, dev -> beta ->
@@ -34,6 +34,15 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
+      # GitHub refuses the deploy job BEFORE it starts when the ref is not
+      # allowed to deploy to the github-pages environment, so nothing inside
+      # that job gets a chance to explain itself. Say it here instead, where
+      # somebody pushing to beta is actually looking.
+      - name: Flag the environment rule
+        if: github.ref_name == 'beta'
+        run: |
+          echo "::warning title=Beta deploys need a settings change::Add 'beta' under Settings > Environments > github-pages > Deployment branches and tags. Until then this run's deploy job is rejected before it starts, and it shows up as an empty 'failed' job with no steps at all."
+
       - name: Checkout stable (main)
         uses: actions/checkout@v7
         with:
@@ -75,13 +84,23 @@ jobs:
         with:
           path: site
 
-  # Requires Settings > Pages > Source to be "GitHub Actions".
+  # The environment key is not optional: deploy-pages deploys through the
+  # github-pages environment, and that environment is protected. GitHub creates
+  # it allowing only the Pages source branch, so a deployment from any other ref
+  # is refused BEFORE this job starts - it reports "failure" with an empty steps
+  # array and no runner, while build sits there green. Nothing in this file can
+  # catch that, because nothing in this file runs.
   #
-  # While Pages is still set to "Deploy from a branch", GitHub refuses any
-  # deployment originating from a different branch, and it refuses it BEFORE the
-  # job starts: this job reports "failure" with an empty steps array and no
-  # runner, while build sits there green. A run pushed from main still succeeds
-  # in the meantime, so the symptom looks intermittent rather than systematic.
+  # Two settings have to be right, and they mask each other:
+  #
+  #   1. Settings > Pages > Source = "GitHub Actions"
+  #      Otherwise branch deployments keep winning and nothing here is served.
+  #   2. Settings > Environments > github-pages > Deployment branches and tags
+  #      must allow beta. This is the one that produces the empty failed job.
+  #
+  # Environment protection rules take precedence over the source-branch rule, so
+  # (2) masks (1): fix (2) first and a run from beta goes green without changing
+  # a single byte of the live site. Fix both, then run the workflow.
   deploy:
     needs: build
     runs-on: ubuntu-latest
