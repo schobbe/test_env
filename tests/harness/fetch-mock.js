@@ -25,6 +25,7 @@
     window.__scaleFactor = 1;
     window.__dropClassName = null;    /* remove this class from the scaled player */
     window.__addClassName = null;     /* give it a class the other player lacks */
+    window.__stats404Count = 0;     /* answer the next N /bf6/stats/ requests with 404 */
 
     /* The core counters the head-to-head judges. matchesPlayed and the
        objective block are deliberately left alone so the per-match rows stay
@@ -59,6 +60,16 @@
         return delay(wait).then(function () {
             if (window.__force404Name && u.indexOf('name=' + window.__force404Name) !== -1) {
                 return notFound('No player found');
+            }
+
+            /* A transient absence for a player who exists. Counts down, so a
+               test can hand out exactly one failure and then let the request
+               through - which is how the confirm-then-report path is exercised.
+               Only /bf6/stats/ is counted, because that is the only endpoint
+               where a false 404 is destructive. */
+            if (u.indexOf('/bf6/stats/') !== -1 && window.__stats404Count > 0) {
+                window.__stats404Count--;
+                return notFound('Player not found');
             }
             if (window.__mode === 'network') {
                 throw new TypeError('Failed to fetch (test harness)');

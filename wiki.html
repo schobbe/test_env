@@ -329,6 +329,23 @@
                     The practical effect: re-running the same search within ten minutes is instant, and hammering the
                     enter key cannot flood the API.
                 </p>
+                <p>
+                    <strong>A 404 is confirmed, not trusted.</strong> One more quirk worth knowing about. The API
+                    intermittently answers <code>404</code> for players that demonstrably exist — it did so twice
+                    during testing, while <code>/bf6/gameevents/</code> answered normally throughout, so the behaviour
+                    is specific to the player-stats lookup rather than a general outage. A lone 404 is destructive here,
+                    because it hides the page and tells the visitor that their player does not exist. So
+                    <code>fetchStats()</code> never believes one on its own: it waits, asks again, and only a
+                    <em>second</em> 404 is reported as an absence. Someone who mistypes a name waits about a second
+                    longer for the answer, which is a good trade for not lying to them.
+                </p>
+                <p>
+                    The confirmation is scoped to <code>/bf6/stats/</code> alone.
+                    <code>/bf6/profile/</code> returns 404 as a matter of course and is already treated as optional,
+                    and the season and activity panels involve no player lookup at all, so neither would repay a
+                    second request. If the confirming attempt fails with a timeout rather than a 404, that propagates
+                    as a transient error instead — the absence was never established, so it is not asserted.
+                </p>
 
                 <h3>5.4 The four localStorage stores</h3>
                 <p>

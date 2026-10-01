@@ -233,6 +233,44 @@
                 disp('bfResults') === 'block' && flat(txt('bfStatus')) === '',
                 disp('bfResults') + ' / status="' + flat(txt('bfStatus')) + '"');
             window.__force404Name = null;
+
+            /* --- S9: a transient 404 must not be believed; a confirmed one must --- */
+            window.__mode = 'live';
+            window.__delayName = null;
+            window.__scaleName = null;
+            window.__stats404Count = 0;
+            var vsBox = $('bfCompareInput');
+            if (vsBox) vsBox.value = '';   /* keep the comparison out of this scenario */
+
+            /* Fresh names on purpose: offroad89 is served from the ten-minute
+               cache, so it would never reach the network and could not exercise
+               the retry at all. */
+            window.__stats404Count = 1;
+            await loadPlayer('flaky_one_9x7', 'steam');
+            await waitFor(function () {
+                return appState.lastQuery && appState.lastQuery.name === 'flaky_one_9x7';
+            }, 400);
+
+            ok('S9 one transient 404 still renders the player',
+                disp('bfResults') === 'block' && flat(txt('bfStatus')) === '',
+                disp('bfResults') + ' / "' + flat(txt('bfStatus')).slice(0, 50) + '"');
+            ok('S9 the retry spent exactly one extra stats request',
+                window.__stats404Count === 0,
+                window.__stats404Count + ' unused failure(s) left');
+
+            window.__stats404Count = 2;
+            await loadPlayer('flaky_two_9x7', 'steam');
+            await waitFor(function () {
+                return txt('bfStatus').indexOf('Player not found') !== -1;
+            }, 400);
+
+            ok('S9 two consecutive 404s are believed',
+                disp('bfResults') === 'none' && txt('bfStatus').indexOf('Player not found') !== -1,
+                disp('bfResults') + ' / "' + flat(txt('bfStatus')).slice(0, 40) + '"');
+            ok('S9 a confirmed absence spent exactly two attempts',
+                window.__stats404Count === 0,
+                window.__stats404Count + ' unused failure(s) left');
+            window.__stats404Count = 0;
         } catch (e) {
             results.push('FAIL | harness exception | ' + (e && e.stack ? e.stack : e));
         }

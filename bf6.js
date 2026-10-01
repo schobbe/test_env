@@ -2643,12 +2643,38 @@ function ensurePlatformOption(platform, sel) {
    normalisation, the "no such player" rule and the error kinds. Only the main
    lookup also asks for /bf6/profile/, which feeds the identity and highlight
    panels - those stay single-player. */
+/* A single 404 from /bf6/stats/ is destructive: it hides the page and tells
+   the visitor the player does not exist. The API intermittently answers exactly
+   that for players who really are there, so an absence is only believed after
+   a second, deliberately spaced attempt.
+
+   The throttle already supplies most of the delay - lastRequestAt was set by
+   the request that just failed - and this constant tops it up so the retry
+   lands in a different window rather than the same one.
+
+   Only /bf6/stats/ is confirmed. /bf6/profile/ 404s as a matter of course, and
+   the shared season/activity panels involve no player lookup at all, so neither
+   would repay a second request. */
+const NOTFOUND_CONFIRM_DELAY_MS = 700;
+
 async function fetchStats(name, platform) {
-    const raw = await apiGet('/bf6/stats/', {
-        name: name,
-        platform: platform,
-        seperation: true
-    });
+    const params = { name: name, platform: platform, seperation: true };
+
+    let raw;
+    try {
+        raw = await apiGet('/bf6/stats/', params);
+    } catch (err) {
+        /* Only an absence is worth confirming; anything else is already an
+           honest failure and is reported as it is. */
+        if (!err || err.kind !== 'notfound') throw err;
+        await sleep(NOTFOUND_CONFIRM_DELAY_MS);
+        /* If this attempt fails too, it propagates. A timeout here means the
+           absence was never confirmed, so we must not go on claiming the
+           player is gone - that would be the same false negative one layer
+           down. */
+        raw = await apiGet('/bf6/stats/', params);
+    }
+
     const stats = normaliseStats(raw);
     /* An empty payload is a 404 in everything but name: without this the page
        would render a completely blank dashboard as if it had succeeded. */
