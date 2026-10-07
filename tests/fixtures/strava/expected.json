@@ -1,0 +1,128 @@
+{
+  "edge_cases": {
+    "altitudeM": 250,
+    "avgHr": 125.5,
+    "avgPower": 222.5,
+    "distanceM": null,
+    "elapsedSec": 119,
+    "firstPowers": [
+      200,
+      205,
+      210,
+      215,
+      220,
+      225,
+      230,
+      235,
+      240,
+      245,
+      200,
+      205
+    ],
+    "lastUnix": 1789286519,
+    "maxHr": 131,
+    "maxPower": 245,
+    "movingSec": 120,
+    "np": 222.5,
+    "productName": "Edge Test",
+    "records": 120,
+    "startUnix": 1789286400,
+    "timerSec": 120,
+    "workKj": 26.7
+  },
+  "export": {
+    "missingFile": 1,
+    "noFile": 1,
+    "notCycling": 1,
+    "rides": 2,
+    "unsupportedFormat": 1
+  },
+  "sample_ride": {
+    "ascentM": 116,
+    "avgHr": 143.57901234567902,
+    "avgPower": 201.38888888888889,
+    "bestEfforts": {
+      "120": {
+        "start": 1175,
+        "watts": 284.175
+      },
+      "1200": {
+        "start": 600,
+        "watts": 275.47333333333336
+      },
+      "15": {
+        "start": 2316,
+        "watts": 428.6
+      },
+      "1800": {
+        "start": 0,
+        "watts": 232.29555555555555
+      },
+      "30": {
+        "start": 2301,
+        "watts": 425.93333333333334
+      },
+      "300": {
+        "start": 998,
+        "watts": 281.86
+      },
+      "5": {
+        "start": 2323,
+        "watts": 436.6
+      },
+      "60": {
+        "start": 2280,
+        "watts": 423.5833333333333
+      },
+      "600": {
+        "start": 848,
+        "watts": 279.2916666666667
+      }
+    },
+    "decouplingPct": 16.6728100130913,
+    "deviceFtp": 265,
+    "distanceM": 26558.129999999997,
+    "dropout": [
+      2400,
+      2405
+    ],
+    "elapsedSec": 3419,
+    "firstLat": 49.40006788529018,
+    "hrZonesSec": [
+      1749,
+      130,
+      88,
+      1161,
+      36,
+      48,
+      28
+    ],
+    "intensity": 0.9217449836551337,
+    "lthr": 172,
+    "maxHr": 188,
+    "maxHrSetting": 188,
+    "maxPower": 461,
+    "movingSec": 3240,
+    "np": 244.26242066861042,
+    "powerZonesSec": [
+      1423,
+      478,
+      0,
+      409,
+      746,
+      9,
+      170
+    ],
+    "records": 3240,
+    "spikeIndex": 1500,
+    "spikesFixed": [
+      1500
+    ],
+    "startUnix": 1789198200,
+    "timerSec": 3240,
+    "tss": 76.46524334040623,
+    "tzOffsetSec": 7200,
+    "weightKg": 72.5,
+    "workKj": 652.5
+  }
+}

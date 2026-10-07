@@ -15,6 +15,7 @@
                     <li><a href="index.html">Home</a></li>
                     <li><a href="map.html">Interactive Map</a></li>
                     <li><a href="bf6.html">BF6 Stats</a></li>
+                    <li><a href="strava.html">Ride Analytics</a></li>
                     <li><a href="wiki.html" class="active">Wiki</a></li>
                 </ul>
             </div>
@@ -39,6 +40,7 @@
                     <li><a href="#charts">Charts explained</a></li>
                     <li><a href="#conventions">Conventions and gotchas</a></li>
                     <li><a href="#local">Running locally</a></li>
+                    <li><a href="#rides">Ride Analytics</a></li>
                 </ol>
             </nav>
 
@@ -58,6 +60,7 @@
                     <li><a href="index.html"><strong>index.html</strong></a> — landing page, project cards, counter demo.</li>
                     <li><a href="map.html"><strong>map.html</strong></a> + <code>map.js</code> — World Explorer: zoomable map, live weather (Open-Meteo), rain radar (RainViewer).</li>
                     <li><a href="bf6.html"><strong>bf6.html</strong></a> + <code>bf6.css</code> + <code>bf6.js</code> — the BF6 player statistics dashboard, documented in the rest of this wiki.</li>
+                    <li><a href="strava.html"><strong>strava.html</strong></a> + <code>strava.css</code> + <code>strava.js</code> — Ride Analytics: cycling analysis of a Strava export, documented in <a href="#rides">section 9</a>.</li>
                     <li><strong>wiki.html</strong> — this page.</li>
                 </ul>
             </section>
@@ -78,6 +81,8 @@
                         <tr><td><code>index.html</code></td><td>Landing page, project cards, counter demo</td><td><code>style.css</code>, <code>script.js</code></td></tr>
                         <tr><td><code>map.html</code></td><td>World Explorer map and weather dashboard</td><td><code>style.css</code>, <code>map.js</code>, Leaflet (unpkg)</td></tr>
                         <tr><td><code>bf6.html</code></td><td>BF6 statistics dashboard markup — one <code>.bf-panel</code> per feature</td><td><code>bf6.css</code>, <code>bf6.js</code></td></tr>
+                        <tr><td><code>strava.html</code></td><td>Ride Analytics markup — five tabbed views, two built so far</td><td><code>strava.css</code>, <code>strava.js</code></td></tr>
+                        <tr><td><code>strava.css</code>, <code>strava.js</code></td><td>Ride Analytics theme (<code>--ra-*</code>, same palette as BF6) and logic: FIT decoder, ZIP reader, IndexedDB storage. Zero dependencies.</td><td>—</td></tr>
                         <tr><td><code>wiki.html</code></td><td>This wiki</td><td><code>style.css</code></td></tr>
                         <tr><td><code>style.css</code></td><td>Shared styles for the landing page, map and wiki. Map and wiki rules are namespaced so they cannot leak onto the landing page.</td><td>—</td></tr>
                         <tr><td><code>bf6.css</code></td><td>Dashboard dark theme built on <code>--bf-*</code> custom properties</td><td>—</td></tr>
@@ -648,6 +653,109 @@ python -m http.server 8500
                     emits its own warning annotation on every <code>beta</code> push, naming the setting to change.
                     A run from <code>main</code> succeeds throughout, which makes the whole thing look
                     intermittent rather than systematic.
+                </p>
+            </section>
+
+            <p class="wiki-top"><a href="#contents">↑ Contents</a></p>
+
+            <section id="rides">
+                <h2>9. Ride Analytics</h2>
+                <p>
+                    <a href="strava.html"><code>strava.html</code></a> analyses cycling from a Strava
+                    <em>Download your archive</em> export. There is no API and no login: the ZIP is read with the
+                    File API, inflated with the browser's own <code>DecompressionStream</code>, and every Garmin
+                    <code>.fit</code> file is decoded by a small reader in <code>strava.js</code>. Nothing is
+                    uploaded. Cycling only for now; runs are counted and skipped.
+                </p>
+
+                <h3>9.1 Import</h3>
+                <ol class="wiki-list">
+                    <li>Only the ZIP's central directory is read up front, so a multi-GB export with photos costs a few MB of reads. ZIP64 is supported.</li>
+                    <li><code>activities.csv</code> supplies the ride name, Strava type and bike. Strava localises its headers, so columns are found by position (ID, date, name, type) with header names only as a hint, and the filename column by its <code>activities/…</code> content. Anything measurable comes from the FIT file, never the CSV.</li>
+                    <li>Each <code>.fit.gz</code> is gunzipped and decoded. The FIT <code>sport</code> field decides whether it is a ride; the CSV type only decides for files that do not say.</li>
+                    <li>The ride's key is its start time (<code>r&lt;unix seconds&gt;</code>), so importing the export again, a folder, or single files updates rides and never duplicates them. A loose FIT file keeps the Strava name an earlier export import gave the ride.</li>
+                    <li>A summary plus per-sample streams (Float32, <code>NaN</code> = not recorded) go into IndexedDB (<code>ride-analytics</code>: stores <code>rides</code> and <code>streams</code>). Later views never re-read files.</li>
+                </ol>
+                <p>
+                    Skipped files are listed by reason after every import: not cycling, GPX/TCX (not supported yet),
+                    manual entries without a file, and rows whose file is missing from the archive. A damaged file
+                    is reported and the import carries on.
+                </p>
+
+                <h3>9.2 Summary rules</h3>
+                <table class="wiki-table">
+                    <thead><tr><th>Value</th><th>Rule</th></tr></thead>
+                    <tbody>
+                        <tr><td>Timer time</td><td>Each sample covers the gap back to the previous one. Gaps over 10 s are a pause (auto-pause or timer stopped) and count 1 s; shorter ones are Garmin smart recording and count in full.</td></tr>
+                        <tr><td>Moving time</td><td>Timer seconds where speed &gt; 0.5 m/s, or power or cadence &gt; 0 (so indoor rides without speed still move).</td></tr>
+                        <tr><td>Avg power, work</td><td>Over timer time with missing power as 0 — the Garmin default, zeros included.</td></tr>
+                        <tr><td>Normalized Power</td><td>30 s rolling mean over the timer-time grid, fourth power, mean, fourth root.</td></tr>
+                        <tr><td>Distance</td><td>Last minus first distance sample; integrated from speed when the file has none.</td></tr>
+                        <tr><td>Elevation gain</td><td>The device's own ascent when present (barometric); otherwise from altitude with 2 m hysteresis.</td></tr>
+                        <tr><td>Date and time</td><td>Local time where the ride happened, from the FIT activity message — not the browser's time zone.</td></tr>
+                    </tbody>
+                </table>
+                <p>
+                    <strong>Power cleaning.</strong> The stored stream stays exactly as recorded; every power figure
+                    (average, NP, max, work, best efforts, zones) is computed on a cleaned copy. A reading more than
+                    twice <em>both</em> neighbours and over 300 W above them is a single-sample spike and is replaced
+                    by the neighbours' mean. A real sprint ramps over several samples, so its neighbours are high too
+                    and it is kept. Anything above 2 500 W is replaced the same way, or becomes a gap when its
+                    neighbours are just as implausible. Dropouts (no power recorded) stay gaps and count as 0 in
+                    averages, as on the device. Rides imported before this rule are flagged in the import summary
+                    until the export is imported again.
+                </p>
+
+                <h3>9.3 The activity view</h3>
+                <table class="wiki-table">
+                    <thead><tr><th>Part</th><th>What it shows</th></tr></thead>
+                    <tbody>
+                        <tr><td>Tiles</td><td>The summary, plus intensity factor (NP / FTP), training load (TSS = timer s × NP × IF / (FTP × 3600) × 100) and Pw:HR drift.</td></tr>
+                        <tr><td>Ride data</td><td>Stacked power, heart rate, speed, cadence and elevation over time or distance, one shared crosshair, pauses as gaps. Power smoothing 1 / 10 / 30 s. Drawn at the chart's real pixel width from per-2-px bucket means, so a six-hour ride draws as fast as a short one.</td></tr>
+                        <tr><td>Route</td><td>The GPS track as an SVG line (equirectangular around the ride's middle latitude) with start, finish and a marker that follows the crosshair. No map tiles are loaded: a tile server would learn where you ride.</td></tr>
+                        <tr><td>Best efforts</td><td>Best average power for 5 s … 60 min over <em>elapsed</em> time with pauses as zeros, so an effort is never stitched together across a stop. Hovering a row shades it on the chart.</td></tr>
+                        <tr><td>Power zones</td><td>Coggan, as % of FTP: &lt; 56, 56–75, 76–90, 91–105, 106–120, 121–150, &gt; 150. Time is timer time; coasting counts in Z1.</td></tr>
+                        <tr><td>Heart rate zones</td><td>Friel, as % of threshold HR: &lt; 81, 81–89, 90–93, 94–99, 100–102, 103–106, &gt; 106. Without a threshold HR, five zones from 60/70/80/90 % of max HR.</td></tr>
+                        <tr><td>Pw:HR drift</td><td>Watts per beat of the second half against the first, over seconds that have both; needs 20 minutes. Under 5 % on a steady ride means good aerobic durability. Meaningless on interval sessions, where the halves differ by design.</td></tr>
+                    </tbody>
+                </table>
+                <p>
+                    <strong>Which FTP.</strong> Until the FTP timeline exists (step 4): the latest manual entry on or
+                    before the ride's date, else the FTP the head unit had set for that ride, else the most recent
+                    Garmin value from an earlier ride. The zone panels name the FTP and where it came from. Threshold
+                    HR likewise: setting, then the ride's own value, then the latest one.
+                </p>
+                <p>
+                    <code>strava.html#ride=&lt;id&gt;</code> opens a ride directly and survives a reload; Back returns
+                    to wherever you opened it from.
+                </p>
+
+                <h3>9.4 Settings</h3>
+                <ul class="wiki-list">
+                    <li><strong>Weight, max HR, threshold HR</strong> — empty means "use what the Garmin recorded in the latest ride".</li>
+                    <li><strong>FTP estimation windows</strong> — how far back the FTP models look for best efforts. Default 90 days; any number of extra windows (7–730 days) can be added for comparison, and any of them made the default.</li>
+                    <li><strong>FTP history</strong> — manual entries (one per date) always win over estimates. The FTP the head unit had set is read from every file and shown alongside, reduced to the rides where it changed.</li>
+                </ul>
+                <p>All three live in <code>localStorage</code> (<code>rides.settings.v1</code>); rides live in IndexedDB.</p>
+
+                <h3>9.5 Roadmap</h3>
+                <ol class="wiki-list">
+                    <li>Import and ride list — <strong>done</strong>.</li>
+                    <li>Single activity: charts, zones, best efforts, route — <strong>done</strong>.</li>
+                    <li>Power curves (mean-maximal power for every duration).</li>
+                    <li>FTP models and the FTP timeline: 20-min, 8-min, 60-min, ramp, 2- and 3-parameter critical power, power-law fit, Garmin-recorded and manual.</li>
+                    <li>Period overview, and fitness &amp; trends (CTL / ATL / TSB).</li>
+                </ol>
+
+                <h3>9.6 Tests</h3>
+<pre class="wiki-pre">powershell -NoProfile -ExecutionPolicy Bypass -File tests\Run-StravaTests.ps1</pre>
+                <p>
+                    Synthetic fixtures come from <code>tests/fixtures/make_strava_fixtures.py</code> (standard library
+                    only, deterministic): a 57-minute ride with a pause, spike and dropout; an edge-case file with
+                    big-endian definitions, compressed timestamps, developer fields and no session; a run; and a
+                    fake export ZIP. The generator computes the expected summary values independently, so the
+                    tests are a real cross-check. Unlike the BF6 runner, this one drives Chrome over the DevTools
+                    protocol, because <code>--virtual-time-budget</code> dumps the DOM before IndexedDB has answered.
                 </p>
             </section>
 

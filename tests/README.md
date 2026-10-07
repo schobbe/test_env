@@ -75,3 +75,47 @@ fail, exit code 1. That is the control proving these tests are not vacuous.
   concatenated strings before the array.
 * `chrome.exe` is a **GUI-subsystem binary**, so a plain pipeline captures none
   of its stdout. Use `Start-Process -RedirectStandardOutput`.
+
+---
+
+# Ride Analytics tests
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File tests\Run-StravaTests.ps1
+```
+
+Same harness idea as above (the real `strava.html` with fixtures and
+assertions injected around `strava.js`), with one difference: **the page is
+driven over the DevTools protocol instead of `--dump-dom`**. Virtual time only
+waits for timers and network, so with `--virtual-time-budget` Chrome dumps the
+DOM while IndexedDB is still opening and the harness never gets past init. The
+runner polls for the results element in real time (120 s limit) and, on a
+timeout, reports the last assertion reached.
+
+| Path | Role |
+|---|---|
+| `Run-StravaTests.ps1` | Builds the harness, drives Chrome, parses and scores results. |
+| `harness/strava-assertions.js` | The assertions. Injected as text. |
+| `fixtures/make_strava_fixtures.py` | Generates every fixture below. Standard library only, deterministic. |
+| `fixtures/strava/*.fit`, `*.zip` | Synthetic ride, edge-case file, run, and a fake Strava export. |
+| `fixtures/strava/expected.json` | Values the generator computed independently of `strava.js`. |
+
+Covered: FIT decoding (pauses, spikes, dropouts, big-endian, compressed
+timestamps, developer fields, missing session, truncated and corrupt files),
+CSV parsing including German headers, ZIP / loose-file / folder imports and
+their skip reasons, re-import without duplicates, the list (sort, filter,
+search), settings validation and persistence, IndexedDB round trip, and the
+activity view: power cleaning rules, best efforts (watts and start second),
+power and HR zone seconds, decoupling, IF and TSS - all against the
+generator's numbers - plus chart panels, hover readout, the route marker,
+best-effort shading, FTP fallbacks, out-of-order opens and Back.
+
+Breaking the compressed-timestamp rollover in `strava.js` fails 5 assertions,
+which is the control showing these tests can fail.
+
+Regenerate the fixtures after changing the generator (the output is
+byte-identical across runs):
+
+```powershell
+python tests\fixtures\make_strava_fixtures.py
+```

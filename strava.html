@@ -1,0 +1,287 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ride Analytics</title>
+    <link rel="stylesheet" href="strava.css?v=2">
+</head>
+<body class="ra-page">
+    <!-- Top bar -->
+    <div class="ra-topbar">
+        <div class="ra-inner ra-topbar-row">
+            <a href="index.html" class="ra-brand">🚴 Ride Analytics <span class="ra-brand-sub">from your Strava export</span></a>
+            <nav class="ra-navlinks">
+                <a href="index.html">Home</a>
+                <a href="map.html">Interactive Map</a>
+                <a href="bf6.html">BF6 Stats</a>
+                <a href="strava.html" class="active">Ride Analytics</a>
+                <a href="wiki.html">Wiki</a>
+            </nav>
+        </div>
+    </div>
+
+    <div class="ra-inner">
+        <div class="ra-hero">
+            <h1>Ride Analytics</h1>
+            <p>Power, heart rate and FTP analysis of your cycling, read straight from your Strava export.
+               Files are processed in this browser and stored only here — nothing is uploaded.</p>
+        </div>
+
+        <!-- The five views. Only the first two exist so far; the rest are
+             shown disabled so the page already reads as its final shape. -->
+        <div class="ra-tabs" role="tablist" aria-label="Views">
+            <button type="button" role="tab" class="ra-tab" id="raTabActivities" data-view="activities" aria-selected="true">Activities</button>
+            <button type="button" role="tab" class="ra-tab" id="raTabActivity" data-view="activity" aria-selected="false" disabled>Activity</button>
+            <button type="button" role="tab" class="ra-tab" data-view="period" aria-selected="false" disabled>Period <span class="ra-soon">planned</span></button>
+            <button type="button" role="tab" class="ra-tab" data-view="power" aria-selected="false" disabled>Power &amp; FTP <span class="ra-soon">planned</span></button>
+            <button type="button" role="tab" class="ra-tab" data-view="fitness" aria-selected="false" disabled>Fitness <span class="ra-soon">planned</span></button>
+        </div>
+
+        <!-- ============================ ACTIVITIES ============================ -->
+        <section class="ra-view" id="raViewActivities" role="tabpanel" aria-labelledby="raTabActivities">
+
+            <!-- Import -->
+            <div class="ra-panel" id="raImportPanel">
+                <div class="ra-panel-head">
+                    <h2>Import</h2>
+                    <span class="ra-muted" id="raLibrarySummary">No rides stored yet.</span>
+                </div>
+
+                <div class="ra-drop" id="raDropZone" tabindex="0">
+                    <p class="ra-drop-title">Drop your Strava export ZIP here</p>
+                    <p class="ra-muted">…or single <code>.fit</code> / <code>.fit.gz</code> files. Re-importing is safe: rides are matched by start time and updated, never duplicated.</p>
+                    <div class="ra-drop-buttons">
+                        <label class="ra-btn">Choose export ZIP
+                            <input type="file" id="raZipInput" accept=".zip,application/zip" hidden>
+                        </label>
+                        <label class="ra-btn ghost">Choose FIT files
+                            <input type="file" id="raFitInput" accept=".fit,.gz" multiple hidden>
+                        </label>
+                        <label class="ra-btn ghost">Choose unzipped folder
+                            <input type="file" id="raFolderInput" webkitdirectory hidden>
+                        </label>
+                    </div>
+                </div>
+
+                <div class="ra-progress" id="raProgress" hidden>
+                    <div class="ra-progress-bar"><span id="raProgressFill"></span></div>
+                    <div class="ra-progress-row">
+                        <span id="raProgressText">Reading…</span>
+                        <button type="button" class="ra-btn ghost small" id="raCancelBtn">Cancel</button>
+                    </div>
+                </div>
+
+                <div class="ra-report" id="raReport" hidden></div>
+
+                <details class="ra-help">
+                    <summary>How do I get my Strava export?</summary>
+                    <ol>
+                        <li>On strava.com open <em>Settings → My Account → Download or Delete Your Account → Get Started</em>.</li>
+                        <li>Under <em>Download Request</em> click <em>Request your archive</em>. Strava emails a link, usually within a few hours.</li>
+                        <li>Drop the downloaded ZIP above. It can be large (photos are included); only <code>activities.csv</code> and the files in <code>activities/</code> are read.</li>
+                    </ol>
+                    <p class="ra-muted">Cycling only for now: runs and other sports are counted and skipped. Garmin <code>.fit</code> files are supported; older <code>.gpx</code>/<code>.tcx</code> rides are listed as skipped.</p>
+                </details>
+            </div>
+
+            <!-- Settings -->
+            <div class="ra-panel">
+                <div class="ra-panel-head">
+                    <h2>Athlete settings</h2>
+                    <span class="ra-muted">Saved in this browser.</span>
+                </div>
+
+                <div class="ra-settings-grid">
+                    <div class="ra-subpanel">
+                        <h3>Body &amp; heart rate</h3>
+                        <p class="ra-muted small">Left empty, the value your Garmin recorded in your latest ride is used.</p>
+                        <div class="ra-form-row">
+                            <label class="ra-field">Weight (kg)
+                                <input type="number" id="raWeight" min="30" max="200" step="0.1" inputmode="decimal">
+                            </label>
+                            <label class="ra-field">Max HR (bpm)
+                                <input type="number" id="raMaxHr" min="100" max="230" step="1" inputmode="numeric">
+                            </label>
+                            <label class="ra-field">Threshold HR (bpm)
+                                <input type="number" id="raLthr" min="80" max="220" step="1" inputmode="numeric">
+                            </label>
+                        </div>
+                    </div>
+
+                    <div class="ra-subpanel">
+                        <h3>FTP estimation windows</h3>
+                        <p class="ra-muted small">How far back the FTP models look for your best efforts. The default drives zones and training load; extra windows are compared alongside it.</p>
+                        <div class="ra-chips" id="raWindowChips"></div>
+                        <form class="ra-form-row" id="raWindowForm">
+                            <label class="ra-field">Add window (days)
+                                <input type="number" id="raWindowInput" min="7" max="730" step="1" placeholder="e.g. 60" inputmode="numeric">
+                            </label>
+                            <button type="submit" class="ra-btn ghost">Add</button>
+                        </form>
+                        <p class="ra-field-error" id="raWindowError" role="alert"></p>
+                    </div>
+
+                    <div class="ra-subpanel wide">
+                        <h3>FTP history</h3>
+                        <p class="ra-muted small">Manual entries — lab tests, your own judgement — always take priority over estimates. The FTP your Garmin had set is listed alongside for reference.</p>
+                        <form class="ra-form-row" id="raFtpForm">
+                            <label class="ra-field">From date
+                                <input type="date" id="raFtpDate" required>
+                            </label>
+                            <label class="ra-field">FTP (W)
+                                <input type="number" id="raFtpWatts" min="50" max="600" step="1" required inputmode="numeric">
+                            </label>
+                            <label class="ra-field grow">Note
+                                <input type="text" id="raFtpNote" maxlength="80" placeholder="e.g. lab test">
+                            </label>
+                            <button type="submit" class="ra-btn">Add entry</button>
+                        </form>
+                        <p class="ra-field-error" id="raFtpError" role="alert"></p>
+                        <div class="ra-two-col">
+                            <div>
+                                <h4>Manual</h4>
+                                <div id="raFtpManual"></div>
+                            </div>
+                            <div>
+                                <h4>Recorded by your Garmin</h4>
+                                <div id="raFtpDevice"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Activity list -->
+            <div class="ra-panel">
+                <div class="ra-panel-head">
+                    <h2>Rides</h2>
+                    <span class="ra-muted" id="raListCount"></span>
+                </div>
+                <div class="ra-filters">
+                    <label class="ra-field grow">Search
+                        <input type="search" id="raSearch" placeholder="Name, type or bike">
+                    </label>
+                    <label class="ra-field">From
+                        <input type="date" id="raFrom">
+                    </label>
+                    <label class="ra-field">To
+                        <input type="date" id="raTo">
+                    </label>
+                    <label class="ra-field">Type
+                        <select id="raType"><option value="">All types</option></select>
+                    </label>
+                </div>
+                <div class="ra-table-wrap">
+                    <table class="ra-table" id="raTable">
+                        <thead>
+                            <tr>
+                                <th data-sort="startUnix" class="sorted desc">Date</th>
+                                <th data-sort="name">Name</th>
+                                <th data-sort="type">Type</th>
+                                <th data-sort="distanceM" class="num">km</th>
+                                <th data-sort="movingSec" class="num">Moving</th>
+                                <th data-sort="ascentM" class="num">Elev m</th>
+                                <th data-sort="avgPower" class="num">Avg W</th>
+                                <th data-sort="np" class="num">NP</th>
+                                <th data-sort="avgHr" class="num">Avg HR</th>
+                                <th data-sort="deviceFtp" class="num" title="FTP set on your Garmin for that ride">FTP</th>
+                            </tr>
+                        </thead>
+                        <tbody></tbody>
+                        <tfoot></tfoot>
+                    </table>
+                </div>
+                <p class="ra-empty" id="raEmpty">Import your export above to see your rides here.</p>
+                <button type="button" class="ra-btn ghost" id="raMoreBtn" hidden>Show more</button>
+            </div>
+
+            <div class="ra-danger">
+                <button type="button" class="ra-btn ghost small" id="raClearBtn">Delete all stored rides</button>
+                <span class="ra-muted small" id="raStorage"></span>
+            </div>
+        </section>
+
+        <!-- ============================= ACTIVITY ============================= -->
+        <section class="ra-view" id="raViewActivity" role="tabpanel" hidden>
+            <div class="ra-panel">
+                <div class="ra-panel-head">
+                    <div>
+                        <h2 id="raActName">—</h2>
+                        <span class="ra-muted" id="raActMeta"></span>
+                    </div>
+                    <button type="button" class="ra-btn ghost small" id="raBackBtn">← All rides</button>
+                </div>
+                <div class="ra-tiles" id="raActTiles"></div>
+                <p class="ra-muted small" id="raActStreams"></p>
+            </div>
+
+            <div class="ra-panel">
+                <div class="ra-panel-head">
+                    <h2>Ride data</h2>
+                    <div class="ra-form-row">
+                        <label class="ra-field">X axis
+                            <select id="raXAxis">
+                                <option value="time">Time</option>
+                                <option value="distance">Distance</option>
+                            </select>
+                        </label>
+                        <label class="ra-field">Power smoothing
+                            <select id="raSmooth">
+                                <option value="1">None</option>
+                                <option value="10">10 s</option>
+                                <option value="30" selected>30 s</option>
+                            </select>
+                        </label>
+                    </div>
+                </div>
+                <div class="ra-readout" id="raReadout" aria-live="off"></div>
+                <div class="ra-chart" id="raChart"></div>
+                <p class="ra-muted small">Move across the chart to read values; the route marker follows. Hover a best effort to highlight it.</p>
+            </div>
+
+            <div class="ra-act-grid">
+                <div class="ra-panel">
+                    <div class="ra-panel-head">
+                        <h2>Route</h2>
+                    </div>
+                    <div class="ra-map" id="raMap"></div>
+                    <p class="ra-muted small">Drawn from your GPS samples only — no map tiles are loaded, so your location never leaves this browser.</p>
+                </div>
+
+                <div class="ra-panel">
+                    <div class="ra-panel-head">
+                        <h2>Best efforts</h2>
+                        <span class="ra-muted small" id="raBestNote"></span>
+                    </div>
+                    <div class="ra-table-wrap">
+                        <table class="ra-table compact" id="raBest">
+                            <thead><tr><th>Duration</th><th class="num">Power</th><th class="num">W/kg</th><th class="num">% FTP</th><th class="num">At</th></tr></thead>
+                            <tbody></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <div class="ra-act-grid">
+                <div class="ra-panel">
+                    <div class="ra-panel-head">
+                        <h2>Power zones</h2>
+                        <span class="ra-muted small" id="raPowerZoneNote"></span>
+                    </div>
+                    <div class="ra-zones" id="raPowerZones"></div>
+                </div>
+                <div class="ra-panel">
+                    <div class="ra-panel-head">
+                        <h2>Heart rate zones</h2>
+                        <span class="ra-muted small" id="raHrZoneNote"></span>
+                    </div>
+                    <div class="ra-zones" id="raHrZones"></div>
+                </div>
+            </div>
+        </section>
+    </div>
+
+    <script src="strava.js?v=2"></script>
+</body>
+</html>

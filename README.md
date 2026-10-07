@@ -10,8 +10,32 @@ This is a simple rep. to test some things
 | `index.html` | Landing page with the counter demo and links to the projects |
 | `map.html` | **World Explorer** — zoomable interactive world map with real-time weather (Open-Meteo), a live rain radar overlay (RainViewer) and a portal-independent dark dashboard sidebar |
 | `bf6.html` | **BF6 Player Stats** — look up any Battlefield 6 player by name and platform |
+| `strava.html` | **Ride Analytics** — cycling analysis of your Strava export: Garmin FIT files decoded in the browser, nothing uploaded |
 | `wiki.html` | **Site Wiki** — how the repo is structured, the lookup/caching workflows, and what every chart on the BF6 dashboard means |
 | `Hello_World.py` | First Python script in this repo |
+
+### Ride Analytics (`strava.html`)
+
+Power, heart-rate and FTP analysis of your cycling, read from Strava's
+*Download your archive* ZIP.
+
+* No API, no login, no third-party JavaScript. The ZIP is walked by hand and
+  inflated with the browser's `DecompressionStream`; Garmin `.fit` files are
+  decoded by a small FIT reader in `strava.js`. Nothing leaves the browser.
+* Rides are read once and kept in IndexedDB (summary + per-sample streams), so
+  re-opening the page is instant and re-importing never duplicates a ride.
+* Done so far: import with a per-reason skip report, a sortable/filterable ride
+  list, a ride summary (NP, work, W/kg, HR, cadence), athlete settings, FTP
+  estimation windows (default 90 days plus your own) and a manual FTP history
+  next to the FTP your Garmin had set.
+* Activity view: stacked power / HR / speed / cadence / elevation chart with a
+  shared crosshair, the route drawn from GPS (no map tiles, so no location
+  leaves the browser), best efforts 5 s – 60 min, Coggan power and Friel HR
+  zones, intensity factor, TSS and Pw:HR drift. Power spikes are cleaned for
+  every figure while the stored stream stays raw.
+* Next: power curves, FTP models and timeline, period and fitness views. See
+  the wiki, section 9.
+* Tests: `tests\Run-StravaTests.ps1` (synthetic FIT fixtures, no real data).
 
 ### BF6 Player Stats (`bf6.html`)
 

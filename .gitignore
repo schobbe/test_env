@@ -15,3 +15,4 @@ __pycache__/
 
 # Generated BF6 test harness (rebuilt by tests/Run-Bf6Tests.ps1)
 tests/harness.generated.html
+tests/strava-harness.generated.html

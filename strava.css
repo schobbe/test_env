@@ -1,0 +1,859 @@
+/* =========================================================
+   Ride Analytics - theme
+   Same palette as bf6.css, under its own ra- prefix so the
+   two dashboards can evolve without stepping on each other.
+   ========================================================= */
+
+:root {
+    --ra-bg: #0b0f19;
+    --ra-panel: #111827;
+    --ra-panel-2: #161f30;
+    --ra-card: #1a2234;
+    --ra-card-2: #131b28;
+    --ra-border: #283548;
+    --ra-border-2: #1f293d;
+    --ra-accent: #818cf8;
+    --ra-accent-strong: #4f46e5;
+    --ra-amber: #f59e0b;
+    --ra-green: #34d399;
+    --ra-red: #f87171;
+    --ra-text: #e2e8f0;
+    --ra-text-strong: #f8fafc;
+    --ra-muted: #94a3b8;
+    --ra-radius: 10px;
+}
+
+* {
+    box-sizing: border-box;
+}
+
+/* Component display rules (.ra-btn is inline-flex) would otherwise beat the
+   hidden attribute the script toggles. */
+[hidden] {
+    display: none !important;
+}
+
+body.ra-page {
+    margin: 0;
+    background: var(--ra-bg);
+    color: var(--ra-text);
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+    line-height: 1.5;
+    min-height: 100vh;
+}
+
+.ra-inner {
+    max-width: 1240px;
+    margin: 0 auto;
+    padding: 0 20px;
+}
+
+code {
+    background: var(--ra-card);
+    border: 1px solid var(--ra-border-2);
+    border-radius: 4px;
+    padding: 0 4px;
+    font-size: 0.9em;
+}
+
+.ra-muted { color: var(--ra-muted); }
+.small { font-size: 0.85em; }
+
+/* ---------- Top bar ---------- */
+.ra-topbar {
+    background: var(--ra-panel-2);
+    border-bottom: 1px solid var(--ra-border);
+    position: sticky;
+    top: 0;
+    z-index: 50;
+}
+
+.ra-topbar-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    padding: 12px 0;
+    flex-wrap: wrap;
+}
+
+.ra-brand {
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+    color: var(--ra-text-strong);
+    text-decoration: none;
+    font-weight: 700;
+    font-size: 1.15em;
+}
+
+.ra-brand-sub {
+    font-size: 0.72em;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--ra-amber);
+}
+
+.ra-navlinks {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    flex-wrap: wrap;
+}
+
+.ra-navlinks a {
+    color: var(--ra-muted);
+    text-decoration: none;
+    font-size: 0.88em;
+    font-weight: 500;
+    padding: 6px 12px;
+    border-radius: 6px;
+    background: var(--ra-card);
+    border: 1px solid var(--ra-border);
+    transition: color 0.2s, background 0.2s;
+}
+
+.ra-navlinks a:hover,
+.ra-navlinks a.active {
+    color: #fff;
+    background: var(--ra-accent-strong);
+    border-color: var(--ra-accent-strong);
+}
+
+/* ---------- Hero & tabs ---------- */
+.ra-hero {
+    padding: 28px 0 8px;
+}
+
+.ra-hero h1 {
+    margin: 0 0 6px;
+    color: var(--ra-text-strong);
+    font-size: 1.8em;
+}
+
+.ra-hero p {
+    margin: 0;
+    color: var(--ra-muted);
+    max-width: 760px;
+}
+
+.ra-tabs {
+    display: flex;
+    gap: 6px;
+    margin: 20px 0 16px;
+    border-bottom: 1px solid var(--ra-border);
+    overflow-x: auto;
+}
+
+.ra-tab {
+    background: none;
+    border: none;
+    border-bottom: 2px solid transparent;
+    color: var(--ra-muted);
+    font: inherit;
+    font-weight: 600;
+    padding: 10px 14px;
+    cursor: pointer;
+    white-space: nowrap;
+}
+
+.ra-tab[aria-selected="true"] {
+    color: var(--ra-text-strong);
+    border-bottom-color: var(--ra-accent);
+}
+
+.ra-tab:disabled {
+    cursor: default;
+    opacity: 0.55;
+}
+
+.ra-soon {
+    font-size: 0.7em;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--ra-amber);
+    margin-left: 4px;
+}
+
+/* ---------- Panels ---------- */
+.ra-panel {
+    background: var(--ra-panel);
+    border: 1px solid var(--ra-border);
+    border-radius: var(--ra-radius);
+    padding: 18px 20px;
+    margin-bottom: 16px;
+}
+
+.ra-panel-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 12px;
+    flex-wrap: wrap;
+    margin-bottom: 12px;
+}
+
+.ra-panel h2 {
+    margin: 0;
+    font-size: 1.15em;
+    color: var(--ra-text-strong);
+}
+
+.ra-panel h3 {
+    margin: 0 0 6px;
+    font-size: 0.98em;
+    color: var(--ra-text-strong);
+}
+
+.ra-panel h4 {
+    margin: 10px 0 6px;
+    font-size: 0.82em;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--ra-muted);
+}
+
+.ra-subpanel {
+    background: var(--ra-card-2);
+    border: 1px solid var(--ra-border-2);
+    border-radius: 8px;
+    padding: 14px 16px;
+}
+
+.ra-subpanel p {
+    margin: 0 0 10px;
+}
+
+.ra-settings-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+}
+
+.ra-subpanel.wide {
+    grid-column: 1 / -1;
+}
+
+.ra-two-col {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+    gap: 16px;
+}
+
+/* ---------- Forms & buttons ---------- */
+.ra-form-row,
+.ra-filters {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+    align-items: flex-end;
+}
+
+.ra-filters {
+    margin-bottom: 12px;
+}
+
+.ra-field {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    font-size: 0.8em;
+    color: var(--ra-muted);
+    min-width: 0;
+}
+
+.ra-field.grow {
+    flex: 1 1 200px;
+}
+
+.ra-field input,
+.ra-field select {
+    background: var(--ra-card);
+    border: 1px solid var(--ra-border);
+    color: var(--ra-text);
+    border-radius: 6px;
+    padding: 7px 10px;
+    font: inherit;
+    font-size: 1.15em;
+    min-width: 0;
+    color-scheme: dark;
+}
+
+.ra-field input[type="number"] {
+    width: 120px;
+}
+
+.ra-field input:focus,
+.ra-field select:focus {
+    outline: 2px solid var(--ra-accent);
+    outline-offset: 1px;
+}
+
+.ra-field-error {
+    color: var(--ra-red);
+    font-size: 0.85em;
+    margin: 6px 0 0;
+    min-height: 1em;
+}
+
+.ra-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--ra-accent-strong);
+    color: #fff;
+    border: 1px solid var(--ra-accent-strong);
+    border-radius: 6px;
+    padding: 8px 14px;
+    font: inherit;
+    font-size: 0.9em;
+    font-weight: 600;
+    cursor: pointer;
+}
+
+.ra-btn.ghost {
+    background: var(--ra-card);
+    border-color: var(--ra-border);
+    color: var(--ra-text);
+}
+
+.ra-btn.small {
+    padding: 4px 10px;
+    font-size: 0.82em;
+}
+
+.ra-btn:hover {
+    filter: brightness(1.15);
+}
+
+.ra-btn:focus-within,
+.ra-btn:focus-visible {
+    outline: 2px solid var(--ra-accent);
+    outline-offset: 2px;
+}
+
+.ra-link {
+    background: none;
+    border: none;
+    color: var(--ra-accent);
+    cursor: pointer;
+    font: inherit;
+    padding: 0;
+}
+
+/* ---------- Import ---------- */
+.ra-drop {
+    border: 2px dashed var(--ra-border);
+    border-radius: var(--ra-radius);
+    padding: 22px;
+    text-align: center;
+    background: var(--ra-card-2);
+    transition: border-color 0.2s, background 0.2s;
+}
+
+.ra-drop.over {
+    border-color: var(--ra-accent);
+    background: var(--ra-card);
+}
+
+.ra-drop-title {
+    margin: 0 0 4px;
+    font-weight: 700;
+    color: var(--ra-text-strong);
+}
+
+.ra-drop p {
+    margin: 0 0 12px;
+}
+
+.ra-drop-buttons {
+    display: flex;
+    gap: 8px;
+    justify-content: center;
+    flex-wrap: wrap;
+}
+
+.ra-progress {
+    margin-top: 14px;
+}
+
+.ra-progress-bar {
+    height: 8px;
+    border-radius: 4px;
+    background: var(--ra-card);
+    overflow: hidden;
+}
+
+.ra-progress-bar span {
+    display: block;
+    height: 100%;
+    width: 0;
+    background: var(--ra-accent);
+    transition: width 0.2s;
+}
+
+.ra-progress-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 10px;
+    margin-top: 6px;
+    font-size: 0.85em;
+    color: var(--ra-muted);
+}
+
+.ra-report {
+    margin-top: 14px;
+    padding: 12px 16px;
+    border-radius: 8px;
+    background: var(--ra-card-2);
+    border: 1px solid var(--ra-border-2);
+}
+
+.ra-report-list {
+    margin: 0;
+    padding-left: 18px;
+}
+
+.ra-report-list li.bad {
+    color: var(--ra-red);
+}
+
+.ra-report-list details {
+    display: inline-block;
+    margin-left: 8px;
+    color: var(--ra-muted);
+    font-size: 0.85em;
+}
+
+.ra-report-list details ul {
+    margin: 4px 0;
+}
+
+.ra-help {
+    margin-top: 14px;
+    font-size: 0.9em;
+}
+
+.ra-help summary {
+    cursor: pointer;
+    color: var(--ra-accent);
+}
+
+/* ---------- Chips ---------- */
+.ra-chips {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+    margin-bottom: 10px;
+}
+
+.ra-chip {
+    display: inline-flex;
+    align-items: center;
+    border: 1px solid var(--ra-border);
+    border-radius: 999px;
+    background: var(--ra-card);
+    overflow: hidden;
+}
+
+.ra-chip.on {
+    border-color: var(--ra-accent);
+    background: rgba(129, 140, 248, 0.15);
+}
+
+.ra-chip button {
+    background: none;
+    border: none;
+    color: var(--ra-text);
+    font: inherit;
+    font-size: 0.88em;
+    cursor: pointer;
+    padding: 4px 10px;
+}
+
+.ra-chip small {
+    color: var(--ra-accent);
+}
+
+.ra-chip .ra-chip-x {
+    padding-left: 2px;
+    color: var(--ra-muted);
+}
+
+/* ---------- Tables ---------- */
+.ra-table-wrap {
+    overflow-x: auto;
+}
+
+.ra-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.9em;
+}
+
+.ra-table th,
+.ra-table td {
+    padding: 7px 10px;
+    border-bottom: 1px solid var(--ra-border-2);
+    text-align: left;
+    white-space: nowrap;
+}
+
+.ra-table th {
+    color: var(--ra-muted);
+    font-weight: 600;
+    font-size: 0.85em;
+    cursor: pointer;
+    user-select: none;
+}
+
+.ra-table th.sorted {
+    color: var(--ra-text-strong);
+}
+
+.ra-table th.sorted::after {
+    content: ' ▲';
+    font-size: 0.8em;
+}
+
+.ra-table th.sorted.desc::after {
+    content: ' ▼';
+}
+
+.ra-table .num {
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+}
+
+.ra-table tbody tr {
+    cursor: pointer;
+}
+
+.ra-table tbody tr:hover,
+.ra-table tbody tr:focus {
+    background: var(--ra-card);
+    outline: none;
+}
+
+.ra-table td.ra-name {
+    white-space: normal;
+    min-width: 180px;
+    color: var(--ra-text-strong);
+}
+
+.ra-table tfoot td {
+    font-weight: 600;
+    border-bottom: none;
+    color: var(--ra-muted);
+}
+
+.ra-table.compact td {
+    padding: 4px 8px;
+    cursor: default;
+}
+
+.ra-table.compact tr {
+    cursor: default;
+}
+
+.ra-empty {
+    color: var(--ra-muted);
+    text-align: center;
+    padding: 20px 0 8px;
+    margin: 0;
+}
+
+#raMoreBtn {
+    margin-top: 10px;
+}
+
+.ra-danger {
+    display: flex;
+    gap: 12px;
+    align-items: center;
+    flex-wrap: wrap;
+    margin: 0 0 40px;
+}
+
+/* ---------- Activity ---------- */
+.ra-tiles {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+    gap: 10px;
+    margin-bottom: 12px;
+}
+
+.ra-tile {
+    background: var(--ra-card);
+    border: 1px solid var(--ra-border-2);
+    border-radius: 8px;
+    padding: 10px 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.ra-tile-label {
+    font-size: 0.75em;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--ra-muted);
+}
+
+.ra-tile strong {
+    font-size: 1.3em;
+    color: var(--ra-text-strong);
+    font-variant-numeric: tabular-nums;
+}
+
+.ra-tile-sub {
+    font-size: 0.8em;
+    color: var(--ra-muted);
+}
+
+.ra-note {
+    margin: 12px 0 0;
+    padding: 10px 14px;
+    border-left: 3px solid var(--ra-amber);
+    background: var(--ra-card-2);
+    color: var(--ra-muted);
+    font-size: 0.9em;
+}
+
+/* ---------- Activity: chart ---------- */
+.ra-act-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+}
+
+.ra-act-grid > .ra-panel {
+    min-width: 0;
+}
+
+.ra-readout {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px 16px;
+    min-height: 1.6em;
+    margin-bottom: 6px;
+    font-size: 0.88em;
+    font-variant-numeric: tabular-nums;
+}
+
+.ra-readout-x {
+    font-weight: 700;
+    color: var(--ra-text-strong);
+    min-width: 64px;
+}
+
+.ra-readout-item i {
+    display: inline-block;
+    width: 8px;
+    height: 8px;
+    border-radius: 2px;
+    margin-right: 5px;
+    vertical-align: middle;
+}
+
+.ra-readout-item strong {
+    color: var(--ra-text-strong);
+}
+
+.ra-chart {
+    width: 100%;
+    overflow: hidden;
+}
+
+.ra-chart-svg {
+    display: block;
+    touch-action: pan-y;
+}
+
+.ra-plot-bg {
+    fill: var(--ra-card-2);
+}
+
+.ra-grid {
+    stroke: var(--ra-border-2);
+    stroke-width: 1;
+}
+
+.ra-tick {
+    fill: var(--ra-muted);
+    font-size: 11px;
+    font-variant-numeric: tabular-nums;
+}
+
+.ra-panel-label {
+    font-size: 11px;
+    font-weight: 600;
+    paint-order: stroke;
+    stroke: var(--ra-card-2);
+    stroke-width: 4px;
+    stroke-linejoin: round;
+}
+
+.ra-overlay {
+    fill: transparent;
+    cursor: crosshair;
+}
+
+.ra-cross-line {
+    stroke: var(--ra-text);
+    stroke-opacity: 0.5;
+    stroke-width: 1;
+}
+
+.ra-cross-dot {
+    stroke: var(--ra-bg);
+    stroke-width: 1.5;
+}
+
+.ra-hl-rect {
+    fill: var(--ra-accent);
+    fill-opacity: 0.16;
+}
+
+/* ---------- Activity: route ---------- */
+.ra-map {
+    width: 100%;
+    background: var(--ra-card-2);
+    border-radius: 8px;
+    overflow: hidden;
+}
+
+.ra-map-svg {
+    display: block;
+}
+
+.ra-route {
+    fill: none;
+    stroke: var(--ra-accent);
+    stroke-width: 2.5;
+    stroke-linejoin: round;
+    stroke-linecap: round;
+}
+
+.ra-map-start { fill: var(--ra-green); stroke: var(--ra-bg); stroke-width: 2; }
+.ra-map-end { fill: var(--ra-red); stroke: var(--ra-bg); stroke-width: 2; }
+.ra-map-marker { fill: var(--ra-amber); stroke: var(--ra-bg); stroke-width: 2; }
+
+/* ---------- Activity: best efforts ---------- */
+#raBest tbody tr {
+    cursor: default;
+}
+
+#raBest tbody tr.on,
+#raBest tbody tr:hover,
+#raBest tbody tr:focus {
+    background: rgba(129, 140, 248, 0.15);
+    outline: none;
+}
+
+/* ---------- Activity: zones ---------- */
+.ra-zones {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.ra-zone {
+    display: grid;
+    grid-template-columns: minmax(130px, 1.3fr) minmax(88px, 0.8fr) 2fr 62px 36px;
+    align-items: center;
+    gap: 8px;
+    font-size: 0.85em;
+}
+
+.ra-zone-name,
+.ra-zone-range {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.ra-zone-name strong {
+    color: var(--ra-text-strong);
+    margin-right: 2px;
+}
+
+.ra-zone-track {
+    height: 10px;
+    background: var(--ra-card-2);
+    border-radius: 5px;
+    overflow: hidden;
+}
+
+.ra-zone-fill {
+    display: block;
+    height: 100%;
+    border-radius: 5px;
+}
+
+.ra-zone-time,
+.ra-zone-pct {
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+}
+
+@media (max-width: 900px) {
+    .ra-act-grid {
+        grid-template-columns: 1fr;
+        gap: 0;
+    }
+}
+
+@media (max-width: 600px) {
+    .ra-zone {
+        grid-template-columns: 1fr 64px 36px;
+    }
+
+    .ra-zone-range {
+        display: none;
+    }
+
+    .ra-zone-track {
+        grid-column: 1 / -1;
+        grid-row: 2;
+    }
+}
+
+@media (max-width: 600px) {
+    .ra-inner {
+        padding: 0 16px;
+    }
+
+    .ra-panel {
+        padding: 14px;
+    }
+
+    .ra-settings-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .ra-form-row .ra-field {
+        flex: 1 1 120px;
+    }
+
+    .ra-tiles {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .ra-tile strong {
+        font-size: 1.15em;
+    }
+
+    .ra-field input[type="number"] {
+        width: 100%;
+    }
+}
+
+@media (max-width: 760px) {
+    .ra-settings-grid {
+        grid-template-columns: 1fr;
+    }
+}
