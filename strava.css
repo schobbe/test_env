@@ -729,6 +729,130 @@ code {
     color: var(--ra-amber);
 }
 
+#raRampBtn[aria-pressed="true"] {
+    border-color: var(--ra-accent);
+    color: var(--ra-accent);
+}
+
+/* ---------- FTP ---------- */
+.ra-ftp-current {
+    display: flex;
+    align-items: baseline;
+    gap: 12px;
+    flex-wrap: wrap;
+    margin-top: 6px;
+}
+
+.ra-ftp-current strong {
+    font-size: 2em;
+    color: var(--ra-text-strong);
+    font-variant-numeric: tabular-nums;
+}
+
+.ra-ftp-current.stale strong {
+    color: var(--ra-amber);
+}
+
+.ra-ftp-table td {
+    white-space: normal;
+    vertical-align: top;
+}
+
+/* Six columns do not fit a phone: keep them readable and let the wrapper
+   scroll sideways, as the other tables do. */
+.ra-ftp-table {
+    min-width: 640px;
+}
+
+.ra-ftp-table tr.on {
+    background: rgba(129, 140, 248, 0.10);
+}
+
+.ra-ftp-table .ra-link.small {
+    font-size: 0.85em;
+}
+
+.ra-dot {
+    display: inline-block;
+    width: 9px;
+    height: 9px;
+    border-radius: 50%;
+    margin-right: 7px;
+    vertical-align: middle;
+}
+
+.ra-badge {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 999px;
+    font-size: 0.75em;
+    font-weight: 600;
+    background: rgba(129, 140, 248, 0.18);
+    color: var(--ra-accent);
+    white-space: nowrap;
+}
+
+.ra-badge.warn {
+    background: rgba(245, 158, 11, 0.15);
+    color: var(--ra-amber);
+}
+
+.ra-ftp-windows {
+    margin-top: 12px;
+}
+
+.ra-chip.static .ra-chip-main {
+    cursor: default;
+    padding: 4px 10px;
+    font-size: 0.88em;
+}
+
+.ra-section-title {
+    margin: 18px 0 8px;
+}
+
+.ra-legend-toggle {
+    display: inline-flex;
+    align-items: center;
+    background: var(--ra-card);
+    border: 1px solid var(--ra-border);
+    border-radius: 999px;
+    color: var(--ra-text);
+    font: inherit;
+    font-size: 0.82em;
+    padding: 3px 10px;
+    cursor: pointer;
+}
+
+.ra-legend-toggle[aria-pressed="false"] {
+    opacity: 0.45;
+}
+
+.ra-ftp-line {
+    fill: none;
+    stroke-width: 1.8;
+}
+
+.ra-ftp-line.used {
+    stroke-width: 3;
+}
+
+.ra-ftp-line.stale {
+    stroke-opacity: 0.45;
+    stroke-dasharray: 4 4;
+}
+
+.ra-ftp-line.garmin {
+    stroke-dasharray: 1 4;
+    stroke-linecap: round;
+    stroke-width: 2;
+}
+
+.ra-ftp-manual {
+    stroke: var(--ra-bg);
+    stroke-width: 1.5;
+}
+
 /* ---------- Power curve ---------- */
 .ra-curve-custom {
     margin-bottom: 8px;

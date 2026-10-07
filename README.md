@@ -38,8 +38,12 @@ Power, heart-rate and FTP analysis of your cycling, read from Strava's
   custom) against the all-time best or the previous period, in W or W/kg.
   Every point links to the ride it was set in; rides with bad power data can
   be excluded.
-* Next: FTP models and timeline, period and fitness views. See the wiki,
-  section 9.
+* FTP: nine estimates side by side - 20-min, 8-min, 60-min, ramp test,
+  2- and 3-parameter critical power, power law, Garmin and manual - over any
+  estimation window, each linked to the effort it came from, and drawn over
+  time with drops from efforts ageing out flagged rather than believed. The
+  chosen model drives zones, IF and TSS; manual entries count for one window.
+* Next: period and fitness views. See the wiki, section 9.
 * Tests: `tests\Run-StravaTests.ps1` (synthetic FIT fixtures, no real data).
 
 ### BF6 Player Stats (`bf6.html`)

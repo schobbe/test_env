@@ -260,6 +260,135 @@ def decoupling(grid):
     return (ef1 - ef2) / ef1 * 100
 
 
+# --------------------------------------------------------------------------
+# FTP models (mirrors strava.js)
+# --------------------------------------------------------------------------
+
+def f32(x):
+    """strava.js keeps curves in a Float32Array; round the same way so the
+    fits below see exactly the numbers the page sees."""
+    return None if x is None else struct.unpack('<f', struct.pack('<f', x))[0]
+
+
+def combine(curves):
+    """Element-wise best of several ride curves (lists of watts or None)."""
+    out = []
+    for vals in zip(*curves):
+        vs = [v for v in vals if v is not None]
+        out.append(max(vs) if vs else None)
+    return out
+
+
+def linear_fit(xs, ys):
+    n = len(xs)
+    mx = sum(xs) / n
+    my = sum(ys) / n
+    sxx = sum((x - mx) ** 2 for x in xs)
+    sxy = sum((x - mx) * (y - my) for x, y in zip(xs, ys))
+    slope = sxy / sxx
+    return slope, my - slope * mx
+
+
+def points(curve, lo, hi):
+    return [(d, w) for d, w in zip(mmp_durations(), curve) if lo <= d <= hi and w is not None]
+
+
+def single_model(curve, sec, k):
+    w = curve[mmp_durations().index(sec)]
+    return None if w is None else k * w
+
+
+def cp2_model(curve):
+    pts = points(curve, 180, 1200)
+    if len(pts) < 3 or pts[-1][0] < 2 * pts[0][0]:
+        return None
+    cp, wp = linear_fit([d for d, _ in pts], [w * d for d, w in pts])
+    if cp <= 0 or wp <= 0:
+        return None
+    return {'cp': cp, 'wPrime': wp, 'ftp': cp + wp / 3600}
+
+
+def power_law_model(curve):
+    pts = points(curve, 120, 3600)
+    if len(pts) < 3 or pts[-1][0] < 600:
+        return None
+    slope, intercept = linear_fit([math.log(d) for d, _ in pts], [math.log(w) for _, w in pts])
+    return {'a': math.exp(intercept), 'b': -slope, 'ftp': math.exp(intercept + slope * math.log(3600))}
+
+
+def nelder_mead(f, x0, steps, iters):
+    n = len(x0)
+    simplex = [list(x0)] + [[x0[k] + (steps[k] if k == j else 0) for k in range(n)] for j in range(n)]
+    vals = [f(p) for p in simplex]
+    for _ in range(iters):
+        order = sorted(range(n + 1), key=lambda i: vals[i])
+        simplex = [simplex[i] for i in order]
+        vals = [vals[i] for i in order]
+        centroid = [sum(simplex[j][k] for j in range(n)) / n for k in range(n)]
+        worst = simplex[n]
+        xr = [centroid[k] + (centroid[k] - worst[k]) for k in range(n)]
+        fr = f(xr)
+        if vals[0] <= fr < vals[n - 1]:
+            simplex[n], vals[n] = xr, fr
+            continue
+        if fr < vals[0]:
+            xe = [centroid[k] + 2 * (centroid[k] - worst[k]) for k in range(n)]
+            fe = f(xe)
+            if fe < fr:
+                simplex[n], vals[n] = xe, fe
+            else:
+                simplex[n], vals[n] = xr, fr
+            continue
+        xc = [centroid[k] + 0.5 * (worst[k] - centroid[k]) for k in range(n)]
+        fc = f(xc)
+        if fc < vals[n]:
+            simplex[n], vals[n] = xc, fc
+            continue
+        for j in range(1, n + 1):
+            simplex[j] = [simplex[0][k] + 0.5 * (simplex[j][k] - simplex[0][k]) for k in range(n)]
+            vals[j] = f(simplex[j])
+    best = min(range(n + 1), key=lambda i: vals[i])
+    return simplex[best], vals[best]
+
+
+def morton(cp, wp, pmax, t):
+    return cp + wp / (t + wp / (pmax - cp))
+
+
+def cp3_model(curve):
+    base = cp2_model(curve)
+    pts = points(curve, 3, 1200)
+    if base is None or len(pts) < 6 or pts[0][0] > 30:
+        return None
+
+    def cost(p):
+        cp, wp, pmax = p
+        if cp <= 0 or wp <= 0 or pmax <= cp:
+            return 1e12
+        return sum(((morton(cp, wp, pmax, d) - w) / w) ** 2 for d, w in pts)
+
+    pmax0 = max(w for _, w in pts) * 1.05
+    x0 = [base['cp'], base['wPrime'], pmax0]
+    (cp, wp, pmax), _ = nelder_mead(cost, x0, [x0[0] * 0.05, x0[1] * 0.1, x0[2] * 0.05], 600)
+    if cost([cp, wp, pmax]) >= 1e12:
+        return None
+    return {'cp': cp, 'wPrime': wp, 'pmax': pmax, 'ftp': morton(cp, wp, pmax, 3600)}
+
+
+def ftp_models(curves, ramp_curves=()):
+    curve = combine([[f32(w) for w in c['w']] for c in curves])
+    ramp = combine([[f32(w) for w in c['w']] for c in ramp_curves]) if ramp_curves else None
+    return {
+        'p20': single_model(curve, 1200, 0.95),
+        'p8': single_model(curve, 480, 0.90),
+        'p60': single_model(curve, 3600, 1.0),
+        'ramp': single_model(ramp, 60, 0.75) if ramp else None,
+        'cp2': cp2_model(curve),
+        'cp3': cp3_model(curve),
+        'plaw': power_law_model(curve),
+    }
+
+
 def analyse(samples, ftp, lthr):
     """Everything the activity view shows beyond the summary."""
     cleaned, fixed = clean_power(samples)
@@ -593,8 +722,11 @@ def main():
             f.write(data)
         print('%-28s %8d bytes' % (name, len(data)))
 
+    curves = [ride_expected['curve'], edge_expected['curve']]
     expected = {'sample_ride': ride_expected, 'edge_cases': edge_expected,
                 'mmpDurations': mmp_durations(),
+                # Both rides in one window; the morning ride marked as a ramp test.
+                'ftpModels': ftp_models(curves, [ride_expected['curve']]),
                 'export': {'rides': 2, 'notCycling': 1, 'unsupportedFormat': 1,
                            'noFile': 1, 'missingFile': 1}}
     with open(os.path.join(OUT, 'expected.json'), 'w', encoding='utf-8', newline='\n') as f:

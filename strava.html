@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Ride Analytics</title>
-    <link rel="stylesheet" href="strava.css?v=3">
+    <link rel="stylesheet" href="strava.css?v=4">
 </head>
 <body class="ra-page">
     <!-- Top bar -->
@@ -211,6 +211,7 @@
                         <span class="ra-muted" id="raActMeta"></span>
                     </div>
                     <div class="ra-head-actions">
+                        <button type="button" class="ra-btn ghost small" id="raRampBtn" aria-pressed="false" hidden>Mark as ramp test</button>
                         <button type="button" class="ra-btn ghost small" id="raExcludeBtn" aria-pressed="false" hidden>Exclude from power analysis</button>
                         <button type="button" class="ra-btn ghost small" id="raBackBtn">← All rides</button>
                     </div>
@@ -289,6 +290,36 @@
             <div class="ra-panel">
                 <div class="ra-panel-head">
                     <div>
+                        <h2>FTP</h2>
+                        <div class="ra-ftp-current" id="raFtpCurrent"></div>
+                    </div>
+                    <div class="ra-form-row">
+                        <label class="ra-field">Window
+                            <select id="raFtpWindow"></select>
+                        </label>
+                        <label class="ra-field">Model used for zones &amp; load
+                            <select id="raFtpModel"></select>
+                        </label>
+                    </div>
+                </div>
+                <div class="ra-table-wrap">
+                    <table class="ra-table compact ra-ftp-table" id="raFtpTable">
+                        <thead><tr><th>Model</th><th class="num">Today</th><th class="num">W/kg</th><th>Based on</th><th></th><th></th></tr></thead>
+                        <tbody></tbody>
+                    </table>
+                </div>
+                <div class="ra-subpanel ra-ftp-windows" id="raFtpWindows" hidden></div>
+
+                <h3 class="ra-section-title">Over time</h3>
+                <div class="ra-legend" id="raFtpLegend"></div>
+                <div class="ra-readout" id="raFtpReadout"></div>
+                <div class="ra-chart" id="raFtpChart"></div>
+                <p class="ra-muted small">Zones and training load use: a manual entry for <em>default window</em> days after its date; otherwise the chosen model on the default window, as of the day before each ride; otherwise your Garmin's value. The window menu only changes what this panel shows — the default is set in the athlete settings.</p>
+            </div>
+
+            <div class="ra-panel">
+                <div class="ra-panel-head">
+                    <div>
                         <h2>Power curve</h2>
                         <span class="ra-muted small" id="raCurveSummary"></span>
                     </div>
@@ -333,11 +364,11 @@
                     </table>
                 </div>
                 <div class="ra-subpanel ra-excluded" id="raExcluded" hidden></div>
-                <p class="ra-note">FTP models built on this curve — 20-min, 8-min, critical power and more, over your estimation windows — arrive with the next step.</p>
+                
             </div>
         </section>
     </div>
 
-    <script src="strava.js?v=3"></script>
+    <script src="strava.js?v=4"></script>
 </body>
 </html>

@@ -81,7 +81,7 @@
                         <tr><td><code>index.html</code></td><td>Landing page, project cards, counter demo</td><td><code>style.css</code>, <code>script.js</code></td></tr>
                         <tr><td><code>map.html</code></td><td>World Explorer map and weather dashboard</td><td><code>style.css</code>, <code>map.js</code>, Leaflet (unpkg)</td></tr>
                         <tr><td><code>bf6.html</code></td><td>BF6 statistics dashboard markup — one <code>.bf-panel</code> per feature</td><td><code>bf6.css</code>, <code>bf6.js</code></td></tr>
-                        <tr><td><code>strava.html</code></td><td>Ride Analytics markup — five tabbed views, three built so far</td><td><code>strava.css</code>, <code>strava.js</code></td></tr>
+                        <tr><td><code>strava.html</code></td><td>Ride Analytics markup — five tabbed views, three built so far (Activities, Activity, Power &amp; FTP)</td><td><code>strava.css</code>, <code>strava.js</code></td></tr>
                         <tr><td><code>strava.css</code>, <code>strava.js</code></td><td>Ride Analytics theme (<code>--ra-*</code>, same palette as BF6) and logic: FIT decoder, ZIP reader, IndexedDB storage. Zero dependencies.</td><td>—</td></tr>
                         <tr><td><code>wiki.html</code></td><td>This wiki</td><td><code>style.css</code></td></tr>
                         <tr><td><code>style.css</code></td><td>Shared styles for the landing page, map and wiki. Map and wiki rules are namespaced so they cannot leak onto the landing page.</td><td>—</td></tr>
@@ -720,10 +720,9 @@ python -m http.server 8500
                     </tbody>
                 </table>
                 <p>
-                    <strong>Which FTP.</strong> Until the FTP timeline exists (step 4): the latest manual entry on or
-                    before the ride's date, else the FTP the head unit had set for that ride, else the most recent
-                    Garmin value from an earlier ride. The zone panels name the FTP and where it came from. Threshold
-                    HR likewise: setting, then the ride's own value, then the latest one.
+                    <strong>Which FTP.</strong> The FTP in use on the ride's date — see <a href="#ftp">9.5</a>. The
+                    zone panels name the FTP and where it came from. Threshold HR: the setting, then the ride's own
+                    value, then the latest one.
                 </p>
                 <p>
                     <code>strava.html#ride=&lt;id&gt;</code> opens a ride directly and survives a reload; Back returns
@@ -752,7 +751,45 @@ python -m http.server 8500
                     re-importing, and it will apply to the FTP models too.
                 </p>
 
-                <h3>9.5 Settings</h3>
+                <h3 id="ftp">9.5 FTP models and the FTP in use</h3>
+                <p>
+                    Every model reads the best curve inside an estimation window (the default window, 90 days unless
+                    changed, or any extra window). Excluded rides never count.
+                </p>
+                <table class="wiki-table">
+                    <thead><tr><th>Model</th><th>Estimate</th><th>Needs</th></tr></thead>
+                    <tbody>
+                        <tr><td>20-min</td><td>95 % of best 20 min (Allen / Coggan)</td><td>a ride of 20 min</td></tr>
+                        <tr><td>8-min</td><td>90 % of best 8 min (Carmichael); runs high for riders strong over short efforts</td><td>8 min</td></tr>
+                        <tr><td>60-min</td><td>best 60 min — FTP by its definition</td><td>an hour of riding</td></tr>
+                        <tr><td>Ramp test</td><td>75 % of best 1 min, only in rides marked as ramp tests on their page</td><td>a marked ride</td></tr>
+                        <tr><td>Critical power 2-p</td><td>least squares of work = CP·t + W′ over 3–20 min; FTP = CP + W′/3600, the model's 60-min power</td><td>3 points spanning ×2</td></tr>
+                        <tr><td>Critical power 3-p</td><td>Morton: P = CP + W′ / (t + W′/(Pmax − CP)), fitted on relative error over 3 s – 20 min by Nelder-Mead (600 steps, started from the 2-p fit); read at 60 min</td><td>6 points from ≤ 30 s</td></tr>
+                        <tr><td>Power law</td><td>log-log least squares of P = a·t⁻ᵇ over 2–60 min, read at 60 min</td><td>points to ≥ 10 min</td></tr>
+                        <tr><td>Garmin</td><td>what the head unit had set, read from each file</td><td>—</td></tr>
+                        <tr><td>Manual</td><td>your entries</td><td>—</td></tr>
+                    </tbody>
+                </table>
+                <p>
+                    <strong>Over time.</strong> A window's best curve only changes when a ride enters it (its date) or
+                    leaves it (date + window), so the timeline is computed exactly on those dates and is a step
+                    function in between.
+                </p>
+                <p>
+                    <strong>"No recent maximal effort".</strong> An envelope can only fall because good efforts age
+                    out — never because of a new ride. So when an estimate is more than 3 % below its reference level
+                    and the newest effort behind it is over 14 days old, it is flagged and drawn faint and dashed
+                    rather than read as lost fitness. The reference follows every rise, and is reset by any estimate
+                    whose effort is at most 14 days old: a fresh test is believed even when it is lower.
+                </p>
+                <p><strong>The FTP in use</strong> — for zones, IF and TSS:</p>
+                <ol class="wiki-list">
+                    <li>a manual entry, for the length of the default window after its date. It counts like a test effort, so an old entry cannot override the models forever;</li>
+                    <li>else the chosen model (20-min unless changed) on the default window — for a ride, as of the day before, so a ride never raises the FTP it is measured against;</li>
+                    <li>else the FTP the head unit had set.</li>
+                </ol>
+
+                <h3>9.6 Settings</h3>
                 <ul class="wiki-list">
                     <li><strong>Weight, max HR, threshold HR</strong> — empty means "use what the Garmin recorded in the latest ride".</li>
                     <li><strong>FTP estimation windows</strong> — how far back the FTP models look for best efforts. Default 90 days; any number of extra windows (7–730 days) can be added for comparison, and any of them made the default.</li>
@@ -760,16 +797,16 @@ python -m http.server 8500
                 </ul>
                 <p>All three live in <code>localStorage</code> (<code>rides.settings.v1</code>); rides live in IndexedDB.</p>
 
-                <h3>9.6 Roadmap</h3>
+                <h3>9.7 Roadmap</h3>
                 <ol class="wiki-list">
                     <li>Import and ride list — <strong>done</strong>.</li>
                     <li>Single activity: charts, zones, best efforts, route — <strong>done</strong>.</li>
                     <li>Power curves (mean-maximal power for every duration) — <strong>done</strong>.</li>
-                    <li>FTP models and the FTP timeline: 20-min, 8-min, 60-min, ramp, 2- and 3-parameter critical power, power-law fit, Garmin-recorded and manual.</li>
+                    <li>FTP models and the FTP timeline: 20-min, 8-min, 60-min, ramp, 2- and 3-parameter critical power, power-law fit, Garmin-recorded and manual — <strong>done</strong>.</li>
                     <li>Period overview, and fitness &amp; trends (CTL / ATL / TSB).</li>
                 </ol>
 
-                <h3>9.7 Tests</h3>
+                <h3>9.8 Tests</h3>
 <pre class="wiki-pre">powershell -NoProfile -ExecutionPolicy Bypass -File tests\Run-StravaTests.ps1</pre>
                 <p>
                     Synthetic fixtures come from <code>tests/fixtures/make_strava_fixtures.py</code> (standard library

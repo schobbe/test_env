@@ -313,7 +313,7 @@
             await openRide(indoorId);
             ok('A8 indoor ride says there is no GPS', /No GPS/.test(q('#raMap').textContent), q('#raMap').textContent);
             eq('A8 distance axis available from speed', q('#raXAxis option[value="distance"]').disabled, false);
-            ok('A8 FTP falls back to the earlier Garmin value', /Garmin, from 2026-09-12/.test(q('#raPowerZoneNote').textContent),
+            ok('A8 FTP comes from the 20-min model on the earlier ride', /FTP 262 W, 20-min model, 90 days/.test(q('#raPowerZoneNote').textContent),
                 q('#raPowerZoneNote').textContent);
             eq('A8 HR zones from the latest threshold HR', qa('#raHrZones .ra-zone').length, 7);
 
@@ -478,6 +478,104 @@
                 q('#raCurveSummary').textContent);
 
             eq('W11 durations read naturally', [5, 75, 1200, 4500, 7200].map(fmtSpan).join(' | '), '5 s | 1:15 min | 20 min | 1 h 15 min | 2 h');
+            q('#raBackBtn').click();
+
+            /* --- M: FTP models against the generator --- */
+            var M = E.ftpModels;
+            var est = estimateAll(periodCurve([morning, indoor]), periodCurve([morning]));
+            near('M1 20-min', est.p20 && est.p20.watts, M.p20, 1e-6);
+            near('M1 8-min', est.p8 && est.p8.watts, M.p8, 1e-6);
+            eq('M1 60-min needs an hour', est.p60, null);
+            near('M1 ramp test', est.ramp && est.ramp.watts, M.ramp, 1e-6);
+            near('M2 CP 2-p: CP', est.cp2 && est.cp2.cp, M.cp2.cp, 1e-6);
+            near('M2 CP 2-p: W′', est.cp2 && est.cp2.wPrime, M.cp2.wPrime, 1e-4);
+            near('M2 CP 2-p: FTP', est.cp2 && est.cp2.watts, M.cp2.ftp, 1e-6);
+            near('M3 CP 3-p: CP', est.cp3 && est.cp3.cp, M.cp3.cp, 0.01);
+            near('M3 CP 3-p: Pmax', est.cp3 && est.cp3.pmax, M.cp3.pmax, 0.01);
+            near('M3 CP 3-p: FTP', est.cp3 && est.cp3.watts, M.cp3.ftp, 0.01);
+            near('M4 power law: exponent', est.plaw && est.plaw.b, M.plaw.b, 1e-9);
+            near('M4 power law: FTP', est.plaw && est.plaw.watts, M.plaw.ftp, 1e-6);
+            ok('M5 20-min names its effort', est.p20.ride.id === morning.id && est.p20.sec === 1200 &&
+                est.p20.start === R.bestEfforts['1200'].start, JSON.stringify([est.p20.ride.id, est.p20.sec, est.p20.start]));
+            ok('M5 fitted models list every ride they used', est.cp2.rides.length >= 1 && est.cp2.rides.every(function (x) { return x.id === morning.id || x.id === indoor.id; }), '');
+
+            /* --- T: the timeline and its staleness rule, on synthetic rides --- */
+            function flatRide(id, date, watts) {
+                var w = new Float32Array(MMP_DURATIONS.length).fill(NaN);
+                var st = new Int32Array(MMP_DURATIONS.length).fill(-1);
+                MMP_DURATIONS.forEach(function (d, i) { if (d <= 1200) { w[i] = watts; st[i] = 0; } });
+                return { id: id, name: id, startUnix: Date.parse(date + 'T08:00:00Z') / 1000, tzOffsetSec: 0,
+                         channels: ['power'], curve: { v: CURVE_VERSION, w: w, s: st } };
+            }
+            var syn = [flatRide('r1', '2026-01-01', 300), flatRide('r2', '2026-03-01', 250), flatRide('r3', '2026-04-20', 240),
+                       flatRide('r4', '2026-06-10', 230), flatRide('r5', '2026-07-01', 245)];
+            var tl = ftpTimeline(syn, 90, []);
+            function at(d) { var p = timelineAt(tl, d); return p && p.est.p20 ? [Math.round(p.est.p20.watts * 100) / 100, p.est.p20.stale] : null; }
+            eq('T1 nothing before the first ride', timelineAt(tl, '2025-12-31'), null);
+            eq('T2 a fresh best is trusted', JSON.stringify(at('2026-01-01')), '[285,false]');
+            eq('T2 a weaker ride does not lower it', JSON.stringify(at('2026-03-15')), '[285,false]');
+            eq('T3 the best leaving the window is flagged, not believed', JSON.stringify(at('2026-04-05')), '[237.5,true]');
+            eq('T3 a fresh ride that is not a new best does not clear the flag', JSON.stringify(at('2026-04-25')), '[237.5,true]');
+            eq('T4 a fresh best at a lower level is believed', JSON.stringify(at('2026-07-01')), '[232.75,false]');
+            ok('T5 only entry and exit dates are computed', tl.points.length === 10, String(tl.points.length));
+
+            /* --- F: the FTP in use --- */
+            eq('F1 model on the default window', (activeFtp('2026-09-14', null) || {}).source, '20-min model, 90 days');
+            near('F1 value', (activeFtp('2026-09-14', null) || {}).watts, M.p20, 1e-6);
+            eq('F2 a ride is measured against the day before it', ftpForRide(morning).source, 'set on your Garmin');
+            addFtpEntry('2026-09-01', 280, 'lab');
+            eq('F3 a manual entry overrides inside the window', activeFtp('2026-09-14', null).watts, 280);
+            eq('F3 and expires after the window', activeFtp('2026-12-15', null).source, 'Garmin, from 2026-09-12');
+            removeFtpEntry('2026-09-01');
+            rideState.settings.ftpModel = 'cp2';
+            near('F4 switching the model', activeFtp('2026-09-14', null).watts, M.cp2.ftp, 1e-6);
+            rideState.settings.ftpModel = 'p20';
+
+            await openRide(morning.id);
+            eq('F5 ramp-test button on a ride with power', q('#raRampBtn').hidden, false);
+            q('#raRampBtn').click();
+            ok('F5 marked', q('#raRampBtn').getAttribute('aria-pressed') === 'true' && loadSettings().rampTests.indexOf(morning.id) !== -1,
+                JSON.stringify(loadSettings().rampTests));
+            near('F5 ramp model now has a value', timelineAt(ftpTimelineFor(90), '2026-09-14').est.ramp.watts, M.ramp, 1e-6);
+            q('#raRampBtn').click();
+            eq('F5 unmarking removes it', timelineAt(ftpTimelineFor(90), '2026-09-14').est.ramp, null);
+
+            await showPower();
+            ok('F6 current FTP', /^262 W/.test(q('#raFtpCurrent').textContent) && /20-min model, 90 days/.test(q('#raFtpCurrent').textContent),
+                q('#raFtpCurrent').textContent);
+            eq('F6 one row per model plus Garmin and manual', qa('#raFtpTable tbody tr').length, FTP_MODELS.length + 2);
+            eq('F6 the model in use is marked', q('#raFtpTable tr.on').dataset.model, 'p20');
+            ok('F6 60-min explains itself', /Not enough data/.test(q('#raFtpTable tr[data-model="p60"]').textContent), '');
+            ok('F6 CP row shows its parameters', /CP 274 W · W′ 2\.3 kJ/.test(q('#raFtpTable tr[data-model="cp2"]').textContent),
+                q('#raFtpTable tr[data-model="cp2"]').textContent);
+            ok('F6 timeline draws the model in use', Boolean(q('#raFtpChart path[data-model="p20"]')), '');
+            eq('F6 other models start hidden', qa('#raFtpChart path[data-model="cp2"]').length, 0);
+            q('#raFtpLegend [data-series="cp2"]').click();
+            eq('F7 legend toggles a model on', qa('#raFtpChart path[data-model="cp2"]').length, 1);
+            var fo = q('#raFtpChart .ra-overlay');
+            var fob = fo.getBoundingClientRect();
+            fo.dispatchEvent(new PointerEvent('pointermove', { clientX: fob.left + fob.width * 0.9, clientY: fob.top + 10, bubbles: true }));
+            ok('F7 hover readout', /In use \d+ W/.test(q('#raFtpReadout').textContent), q('#raFtpReadout').textContent);
+
+            q('#raFtpTable [data-use="cp2"]').click();
+            eq('F8 "Use" switches the model', rideState.settings.ftpModel, 'cp2');
+            eq('F8 persisted', loadSettings().ftpModel, 'cp2');
+            ok('F8 current FTP follows', new RegExp('^' + Math.round(M.cp2.ftp) + ' W').test(q('#raFtpCurrent').textContent), q('#raFtpCurrent').textContent);
+            q('#raFtpModel').value = 'p20';
+            q('#raFtpModel').dispatchEvent(new Event('change'));
+            eq('F8 and back through the menu', loadSettings().ftpModel, 'p20');
+
+            addWindow(180);
+            renderFtp();
+            eq('F9 the model under every window', qa('#raFtpWindows [data-window]').length, 2);
+            removeWindow(180);
+            renderFtp();
+            eq('F9 hidden with one window', q('#raFtpWindows').hidden, true);
+
+            q('#raFtpTable tr[data-model="p20"] .ra-link').click();
+            await waitFor(function () { return rideState.act && rideState.act.chart && rideState.act.highlight; }, 200);
+            eq('F10 an estimate opens the effort behind it', JSON.stringify(rideState.act.highlight),
+                JSON.stringify({ sec: 1200, start: R.bestEfforts['1200'].start }));
             q('#raBackBtn').click();
 
             /* --- S: settings --- */

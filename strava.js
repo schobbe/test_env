@@ -71,6 +71,27 @@ const CURVE_VERSION = 1;
 const CURVE_KEY_S = [5, 60, 300, 1200, 3600];
 const CURVE_TICKS_S = [1, 5, 15, 60, 300, 1200, 3600, 10800, 21600];
 
+/* FTP models. Each reads the best curve inside an estimation window. */
+const FTP_MODELS = [
+    { key: 'p20', label: '20-min', how: '95 % of best 20 min' },
+    { key: 'p8', label: '8-min', how: '90 % of best 8 min' },
+    { key: 'p60', label: '60-min', how: 'Best 60 min' },
+    { key: 'ramp', label: 'Ramp test', how: '75 % of best 1 min, in rides marked as ramp tests' },
+    { key: 'cp2', label: 'Critical power 2-p', how: 'Work = CP·t + W′ fitted over 3–20 min, read at 60 min' },
+    { key: 'cp3', label: 'Critical power 3-p', how: 'Morton model fitted over 3 s – 20 min, read at 60 min' },
+    { key: 'plaw', label: 'Power law', how: 'P = a·t⁻ᵇ fitted over 2–60 min, read at 60 min' }
+];
+const DEFAULT_FTP_MODEL = 'p20';
+const MODEL_COLORS = { p20: '#f59e0b', p8: '#38bdf8', p60: '#34d399', ramp: '#c084fc', cp2: '#f87171',
+                       cp3: '#fb923c', plaw: '#a3e635', garmin: '#cbd5e1', manual: '#818cf8' };
+
+/* An estimate that fell more than 3 % below its level while the effort
+   behind it is over two weeks old has only lost efforts to the window: it is
+   flagged instead of being read as lost fitness. A fresh effort is trusted. */
+const STALE_DROP = 0.97;
+const FRESH_EFFORT_DAYS = 14;
+const CP3_ITERATIONS = 600;
+
 /* Chart channels, in display order. */
 const CHANNELS = [
     { key: 'power', label: 'Power', unit: 'W', color: '#f59e0b', zero: true, digits: 0 },
@@ -550,20 +571,9 @@ function decoupling(powerGrid, hrGrid) {
     return ef1 > 0 ? ((ef1 - ef2) / ef1) * 100 : null;
 }
 
-/* The FTP that applies on the ride's date. Step 4 replaces this with the
-   model-driven timeline; until then: the latest manual entry on or before
-   the date, else what the head unit had set for that ride, else the most
-   recent Garmin value from any earlier ride. */
+/* The FTP a ride is measured against - see activeFtp. */
 function ftpForRide(ride) {
-    const date = fmtDate(ride);
-    const manual = rideState.settings.ftpEntries.filter((e) => e.date <= date);
-    if (manual.length) return { watts: manual[manual.length - 1].watts, source: 'manual entry from ' + manual[manual.length - 1].date };
-    if (isNum(ride.deviceFtp)) return { watts: ride.deviceFtp, source: 'set on your Garmin' };
-    let best = null;
-    for (const r of rideState.rides) {
-        if (isNum(r.deviceFtp) && r.startUnix <= ride.startUnix && (!best || r.startUnix > best.startUnix)) best = r;
-    }
-    return best ? { watts: best.deviceFtp, source: 'Garmin, from ' + fmtDate(best) } : null;
+    return activeFtp(fmtDate(ride), ride);
 }
 
 /* Threshold HR for zones: setting, else this ride's device value, else the
@@ -960,7 +970,7 @@ async function dbClear() {
 function defaultSettings() {
     return { weightKg: null, maxHr: null, lthr: null, ftpEntries: [],
              windows: [DEFAULT_WINDOW_DAYS], defaultWindow: DEFAULT_WINDOW_DAYS,
-             excluded: [] };
+             excluded: [], rampTests: [], ftpModel: DEFAULT_FTP_MODEL };
 }
 
 function loadSettings() {
@@ -979,7 +989,10 @@ function loadSettings() {
             if (s.windows.includes(raw.defaultWindow)) s.defaultWindow = raw.defaultWindow;
             else if (!s.windows.includes(s.defaultWindow)) s.defaultWindow = s.windows[0];
             /* Kept here, not on the ride, so it survives a re-import. */
-            if (Array.isArray(raw.excluded)) s.excluded = raw.excluded.filter((id) => typeof id === 'string' && /^r\d+$/.test(id));
+            const ids = (v) => (Array.isArray(v) ? v.filter((id) => typeof id === 'string' && /^r\d+$/.test(id)) : []);
+            s.excluded = ids(raw.excluded);
+            s.rampTests = ids(raw.rampTests);
+            if (FTP_MODELS.some((m) => m.key === raw.ftpModel)) s.ftpModel = raw.ftpModel;
         }
     } catch (e) { /* unreadable or blocked storage: defaults */ }
     return s;
@@ -1065,6 +1078,7 @@ const rideState = {
     shown: LIST_PAGE,
     current: null,
     openToken: 0,
+    dataVersion: 0, /* bumped whenever rides or their curves change */
     act: null       /* the open ride: { ride, streams, analysis, chart, map, ... } */
 };
 
@@ -1184,6 +1198,7 @@ async function importFiles(fileList) {
     } finally {
         rideState.importing = false;
         rideState.rides = await dbAllRides();
+        rideState.dataVersion++;
         rideState.lastReport = report;
         showProgress(false);
         renderAll();
@@ -1885,7 +1900,7 @@ function renderZones() {
         $('raPowerZoneNote').textContent = '';
         pBox.replaceChildren(el('p', { class: 'ra-empty', text: 'Add an FTP in the settings to see power zones.' }));
     } else {
-        $('raPowerZoneNote').textContent = 'FTP ' + a.ftp.watts + ' W, ' + a.ftp.source;
+        $('raPowerZoneNote').textContent = 'FTP ' + Math.round(a.ftp.watts) + ' W, ' + a.ftp.source;
         zoneBars(pBox, a.powerZones, POWER_ZONE_LOWS, POWER_ZONE_NAMES, a.ftp.watts, 'W');
     }
     if (!act.streams.hr) {
@@ -1913,7 +1928,7 @@ function renderActTiles() {
         ['Avg power', fmtInt(r.avgPower) + ' W', wkg(r.avgPower)],
         ['Normalized power', fmtInt(r.np) + ' W', wkg(r.np)],
         ['Intensity factor', isNum(a.intensity) ? a.intensity.toFixed(2) : '–', a.ftp ? 'NP / FTP' : 'needs an FTP'],
-        ['Training load', isNum(a.tss) ? fmtInt(a.tss) + ' TSS' : '–', a.ftp ? 'FTP ' + a.ftp.watts + ' W, ' + a.ftp.source : null],
+        ['Training load', isNum(a.tss) ? fmtInt(a.tss) + ' TSS' : '–', a.ftp ? 'FTP ' + Math.round(a.ftp.watts) + ' W, ' + a.ftp.source : null],
         ['Max power', fmtInt(r.maxPower) + ' W', r.spikesFixed ? r.spikesFixed + ' spike' + (r.spikesFixed > 1 ? 's' : '') + ' removed' : null],
         ['Work', fmtInt(r.workKj) + ' kJ'],
         ['Avg heart rate', fmtInt(r.avgHr) + ' bpm', isNum(r.maxHr) ? 'Max ' + r.maxHr + ' bpm' : null],
@@ -1954,6 +1969,7 @@ async function openRide(id, fromHistory) {
     }
     rideState.act = { ride: r, streams, analysis: analyseRide(r, streams), highlight: null, hover: null, chart: null, map: null };
     renderExcludeButton();
+    renderRampButton();
     renderActTiles();
     renderChart();
     renderMap();
@@ -2057,6 +2073,7 @@ function ensureCurves() {
                 await dbPutSummary(todo[i]);
                 if (i % 5 === 4) await new Promise((r) => setTimeout(r, 0));
             }
+            rideState.dataVersion++;
             return todo.length;
         } finally {
             rideState.curvesPending = null;
@@ -2099,6 +2116,7 @@ function fmtRange(range) {
 }
 
 function renderPower() {
+    renderFtp();
     renderPeriodOptions();
     const key = $('raCurvePeriod').value;
     $('raCurveCustom').hidden = key !== 'custom';
@@ -2342,6 +2360,472 @@ function renderExcludeButton() {
     btn.textContent = on ? 'Excluded from power analysis — include' : 'Exclude from power analysis';
 }
 
+/* ------------------------------ FTP MODELS ----------------------------- */
+
+const modelLabel = (key) => (FTP_MODELS.find((m) => m.key === key) || { label: key }).label;
+
+function curvePoints(curve, lo, hi) {
+    const out = [];
+    MMP_DURATIONS.forEach((d, i) => {
+        if (d >= lo && d <= hi && !Number.isNaN(curve.w[i])) out.push({ d, w: curve.w[i], i });
+    });
+    return out;
+}
+
+/* Ordinary least squares, summed left to right like the generator's. */
+function linearFit(xs, ys) {
+    const n = xs.length;
+    let mx = 0, my = 0;
+    for (let i = 0; i < n; i++) { mx += xs[i]; my += ys[i]; }
+    mx /= n;
+    my /= n;
+    let sxx = 0, sxy = 0;
+    for (let i = 0; i < n; i++) { sxx += (xs[i] - mx) ** 2; sxy += (xs[i] - mx) * (ys[i] - my); }
+    const slope = sxy / sxx;
+    return { slope, intercept: my - slope * mx };
+}
+
+/* Rides behind a set of curve points, and the effort that represents them
+   (the longest duration used). */
+function provenance(curve, pts) {
+    const rides = [...new Set(pts.map((p) => curve.ride[p.i]))];
+    const last = pts[pts.length - 1];
+    return { rides, ride: curve.ride[last.i], sec: last.d, start: curve.start[last.i] };
+}
+
+function singleEstimate(curve, sec, k) {
+    const i = MMP_DURATIONS.indexOf(sec);
+    if (!curve || Number.isNaN(curve.w[i])) return null;
+    return Object.assign({ watts: k * curve.w[i], detail: fmtSpan(sec) + ' best ' + Math.round(curve.w[i]) + ' W' },
+        provenance(curve, [{ d: sec, w: curve.w[i], i }]));
+}
+
+function cp2Estimate(curve) {
+    const pts = curvePoints(curve, 180, 1200);
+    if (pts.length < 3 || pts[pts.length - 1].d < 2 * pts[0].d) return null;
+    const { slope: cp, intercept: wp } = linearFit(pts.map((p) => p.d), pts.map((p) => p.w * p.d));
+    if (!(cp > 0) || !(wp > 0)) return null;
+    return Object.assign({ watts: cp + wp / 3600, cp, wPrime: wp,
+        detail: 'CP ' + Math.round(cp) + ' W · W′ ' + (wp / 1000).toFixed(1) + ' kJ · ' + pts.length + ' points' }, provenance(curve, pts));
+}
+
+function powerLawEstimate(curve) {
+    const pts = curvePoints(curve, 120, 3600);
+    if (pts.length < 3 || pts[pts.length - 1].d < 600) return null;
+    const { slope, intercept } = linearFit(pts.map((p) => Math.log(p.d)), pts.map((p) => Math.log(p.w)));
+    return Object.assign({ watts: Math.exp(intercept + slope * Math.log(3600)), a: Math.exp(intercept), b: -slope,
+        detail: 'exponent ' + (-slope).toFixed(3) + ' · ' + pts.length + ' points' }, provenance(curve, pts));
+}
+
+/* Plain Nelder-Mead with fixed coefficients and a fixed iteration count, so
+   the generator can reproduce it step for step. */
+function nelderMead(f, x0, steps, iters) {
+    const n = x0.length;
+    let simplex = [x0.slice()].concat(x0.map((_, j) => x0.map((v, k) => v + (k === j ? steps[k] : 0))));
+    let vals = simplex.map(f);
+    for (let it = 0; it < iters; it++) {
+        const order = simplex.map((_, i) => i).sort((a, b) => vals[a] - vals[b]);
+        simplex = order.map((i) => simplex[i]);
+        vals = order.map((i) => vals[i]);
+        const centroid = [];
+        for (let k = 0; k < n; k++) {
+            let s = 0;
+            for (let j = 0; j < n; j++) s += simplex[j][k];
+            centroid.push(s / n);
+        }
+        const worst = simplex[n];
+        const xr = centroid.map((c, k) => c + (c - worst[k]));
+        const fr = f(xr);
+        if (vals[0] <= fr && fr < vals[n - 1]) { simplex[n] = xr; vals[n] = fr; continue; }
+        if (fr < vals[0]) {
+            const xe = centroid.map((c, k) => c + 2 * (c - worst[k]));
+            const fe = f(xe);
+            if (fe < fr) { simplex[n] = xe; vals[n] = fe; } else { simplex[n] = xr; vals[n] = fr; }
+            continue;
+        }
+        const xc = centroid.map((c, k) => c + 0.5 * (worst[k] - c));
+        const fc = f(xc);
+        if (fc < vals[n]) { simplex[n] = xc; vals[n] = fc; continue; }
+        for (let j = 1; j <= n; j++) {
+            simplex[j] = simplex[j].map((v, k) => simplex[0][k] + 0.5 * (v - simplex[0][k]));
+            vals[j] = f(simplex[j]);
+        }
+    }
+    let best = 0;
+    for (let i = 1; i <= n; i++) if (vals[i] < vals[best]) best = i;
+    return { x: simplex[best], value: vals[best] };
+}
+
+const morton = (cp, wp, pmax, t) => cp + wp / (t + wp / (pmax - cp));
+
+/* Morton's 3-parameter critical power model, started from the 2-p fit and
+   fitted on relative error so short and long durations weigh alike. */
+function cp3Estimate(curve) {
+    const base = cp2Estimate(curve);
+    const pts = curvePoints(curve, 3, 1200);
+    if (!base || pts.length < 6 || pts[0].d > 30) return null;
+    const cost = ([cp, wp, pmax]) => {
+        if (cp <= 0 || wp <= 0 || pmax <= cp) return 1e12;
+        let s = 0;
+        for (const p of pts) s += ((morton(cp, wp, pmax, p.d) - p.w) / p.w) ** 2;
+        return s;
+    };
+    let pmax0 = -Infinity;
+    for (const p of pts) if (p.w > pmax0) pmax0 = p.w;
+    const x0 = [base.cp, base.wPrime, pmax0 * 1.05];
+    const { x: [cp, wp, pmax] } = nelderMead(cost, x0, [x0[0] * 0.05, x0[1] * 0.1, x0[2] * 0.05], CP3_ITERATIONS);
+    if (cost([cp, wp, pmax]) >= 1e12) return null;
+    return Object.assign({ watts: morton(cp, wp, pmax, 3600), cp, wPrime: wp, pmax,
+        detail: 'CP ' + Math.round(cp) + ' W · W′ ' + (wp / 1000).toFixed(1) + ' kJ · Pmax ' + Math.round(pmax) + ' W' }, provenance(curve, pts));
+}
+
+function estimateAll(curve, rampCurve) {
+    return {
+        p20: singleEstimate(curve, 1200, 0.95),
+        p8: singleEstimate(curve, 480, 0.90),
+        p60: singleEstimate(curve, 3600, 1),
+        ramp: rampCurve && rampCurve.count ? singleEstimate(rampCurve, 60, 0.75) : null,
+        cp2: cp2Estimate(curve),
+        cp3: cp3Estimate(curve),
+        plaw: powerLawEstimate(curve)
+    };
+}
+
+const ftpEligible = () => rideState.rides.filter((r) => r.curve && !isExcluded(r.id));
+
+/* Every model, as a step function of the date. A window's best curve only
+   changes when a ride enters (its date) or leaves (date + window), so those
+   are the only dates computed - exact, and cheap for hundreds of rides. */
+function ftpTimeline(rides, days, rampIds) {
+    const list = rides.map((r) => ({ r, date: fmtDate(r) }))
+        .sort((a, b) => a.date.localeCompare(b.date) || a.r.startUnix - b.r.startUnix);
+    const dates = [...new Set(list.flatMap((x) => [x.date, addDays(x.date, days)]))].sort();
+    const points = dates.map((date) => {
+        const from = addDays(date, -(days - 1));
+        const inWin = list.filter((x) => x.date >= from && x.date <= date).map((x) => x.r);
+        return { date, count: inWin.length,
+                 est: estimateAll(periodCurve(inWin), periodCurve(inWin.filter((r) => rampIds.includes(r.id)))) };
+    });
+    for (const m of FTP_MODELS) {
+        let ref = null;
+        for (const p of points) {
+            const e = p.est[m.key];
+            if (!e) continue;
+            const newest = e.rides.reduce((a, r) => (fmtDate(r) > a ? fmtDate(r) : a), '0000-01-01');
+            e.effortAge = daysBetween(newest, p.date);
+            if (e.effortAge <= FRESH_EFFORT_DAYS || ref === null || e.watts > ref) ref = e.watts;
+            e.stale = e.watts < STALE_DROP * ref;
+        }
+    }
+    return { days, points };
+}
+
+/* Cached per window; any change to rides or to what counts drops the cache. */
+function ftpTimelineFor(days) {
+    const s = rideState.settings;
+    const key = [days, rideState.dataVersion, s.excluded.join(), s.rampTests.join()].join('|');
+    rideState.ftpCache = rideState.ftpCache || {};
+    if (!rideState.ftpCache[key]) rideState.ftpCache[key] = ftpTimeline(ftpEligible(), days, s.rampTests);
+    return rideState.ftpCache[key];
+}
+
+/* The timeline's state on a date: the last computed point on or before it. */
+function timelineAt(tl, date) {
+    let lo = 0, hi = tl.points.length - 1, found = null;
+    while (lo <= hi) {
+        const mid = (lo + hi) >> 1;
+        if (tl.points[mid].date <= date) { found = tl.points[mid]; lo = mid + 1; } else hi = mid - 1;
+    }
+    return found;
+}
+
+function garminFtpAt(date, ride) {
+    if (ride && isNum(ride.deviceFtp)) return { watts: ride.deviceFtp, date: fmtDate(ride), ride };
+    let best = null;
+    for (const r of rideState.rides) {
+        if (isNum(r.deviceFtp) && fmtDate(r) <= date && (!best || r.startUnix > best.startUnix)) best = r;
+    }
+    return best ? { watts: best.deviceFtp, date: fmtDate(best), ride: best } : null;
+}
+
+function manualFtpAt(date, days) {
+    const live = rideState.settings.ftpEntries.filter((e) => e.date <= date && e.date > addDays(date, -days));
+    return live.length ? live[live.length - 1] : null;
+}
+
+/* The FTP zones and training load use:
+   1. a manual entry, for the length of the default window after its date -
+      it counts like a test effort, so an old entry cannot override forever;
+   2. else the chosen model on the default window - for a ride, as of the day
+      before, so a ride never raises the FTP it is measured against;
+   3. else what the head unit had set. */
+function activeFtp(date, ride) {
+    const s = rideState.settings;
+    const days = s.defaultWindow;
+    const manual = manualFtpAt(date, days);
+    if (manual) return { watts: manual.watts, kind: 'manual', source: 'manual entry from ' + manual.date };
+    const p = timelineAt(ftpTimelineFor(days), ride ? addDays(date, -1) : date);
+    const e = p && p.est[s.ftpModel];
+    if (e) {
+        return { watts: e.watts, kind: 'model', stale: e.stale,
+                 source: modelLabel(s.ftpModel) + ' model, ' + days + ' days' + (e.stale ? ', no recent maximal effort' : '') };
+    }
+    const g = garminFtpAt(date, ride);
+    if (g) return { watts: g.watts, kind: 'garmin', source: g.ride === ride ? 'set on your Garmin' : 'Garmin, from ' + g.date };
+    return null;
+}
+
+const isRampTest = (id) => rideState.settings.rampTests.includes(id);
+
+function setRampTest(id, on) {
+    const s = rideState.settings;
+    s.rampTests = s.rampTests.filter((x) => x !== id);
+    if (on) s.rampTests.push(id);
+    saveSettings();
+}
+
+function renderRampButton() {
+    const btn = $('raRampBtn');
+    const r = rideState.act && rideState.act.ride;
+    btn.hidden = !r || !r.channels.includes('power');
+    if (!r) return;
+    const on = isRampTest(r.id);
+    btn.setAttribute('aria-pressed', on ? 'true' : 'false');
+    btn.textContent = on ? 'Ramp test ✓' : 'Mark as ramp test';
+}
+
+function renderFtpWindowOptions() {
+    const sel = $('raFtpWindow');
+    const s = rideState.settings;
+    const current = Number(sel.value) || s.defaultWindow;
+    sel.replaceChildren(...s.windows.map((d) => el('option', { value: String(d), text: d + ' days' + (d === s.defaultWindow ? ' (default)' : '') })));
+    sel.value = String(s.windows.includes(current) ? current : s.defaultWindow);
+    const msel = $('raFtpModel');
+    if (!msel.options.length) msel.replaceChildren(...FTP_MODELS.map((m) => el('option', { value: m.key, text: m.label })));
+    msel.value = s.ftpModel;
+}
+
+function renderFtp() {
+    renderFtpWindowOptions();
+    const s = rideState.settings;
+    const days = Number($('raFtpWindow').value);
+    const today = todayStr();
+    const tl = ftpTimelineFor(days);
+    const now = timelineAt(tl, today);
+    const active = activeFtp(today, null);
+    rideState.ftp = { days, tl, today, hidden: rideState.ftp ? rideState.ftp.hidden : null };
+
+    const kg = weightFor({});
+    $('raFtpCurrent').replaceChildren(
+        el('strong', { text: active ? Math.round(active.watts) + ' W' : '–' }),
+        el('span', { class: 'ra-muted', text: active ? (isNum(kg) ? (active.watts / kg).toFixed(2) + ' W/kg · ' : '') + active.source
+                                                   : 'No estimate yet: import rides with power, or add an FTP in the settings.' })
+    );
+    if (active && active.stale) $('raFtpCurrent').classList.add('stale'); else $('raFtpCurrent').classList.remove('stale');
+
+    const garmin = garminFtpAt(today, null);
+    const manual = manualFtpAt(today, s.defaultWindow);
+    const rows = FTP_MODELS.map((m) => {
+        const e = now && now.est[m.key];
+        const used = m.key === s.ftpModel;
+        return el('tr', { 'data-model': m.key, class: used ? 'on' : null }, [
+            el('td', null, [el('i', { class: 'ra-dot', style: 'background:' + MODEL_COLORS[m.key] }), el('strong', { text: m.label }),
+                el('div', { class: 'ra-muted small', text: m.how })]),
+            el('td', { class: 'num', text: e ? Math.round(e.watts) + ' W' : '–' }),
+            el('td', { class: 'num', text: e && isNum(kg) ? (e.watts / kg).toFixed(2) : '–' }),
+            el('td', null, e ? [el('div', { text: e.detail }),
+                el('button', { type: 'button', class: 'ra-link small', onclick: () => openEffort(e) }, e.ride.name + ' · ' + fmtDate(e.ride))]
+                : el('span', { class: 'ra-muted small', text: m.key === 'ramp' && !s.rampTests.length
+                    ? 'Mark a ride as a ramp test on its page' : 'Not enough data in this window' })),
+            el('td', null, e && e.stale ? el('span', { class: 'ra-badge warn', title: 'Best effort is ' + e.effortAge + ' days old and the estimate has fallen: probably no maximal effort lately, not lost fitness.', text: 'no recent max effort' }) : null),
+            el('td', { class: 'num' }, used ? el('span', { class: 'ra-badge', text: 'in use' })
+                : el('button', { type: 'button', class: 'ra-btn ghost small', 'data-use': m.key,
+                                 onclick: () => { s.ftpModel = m.key; saveSettings(); if (rideState.ftp.hidden) rideState.ftp.hidden.delete(m.key); renderFtp(); } }, 'Use'))
+        ]);
+    });
+    rows.push(el('tr', { 'data-model': 'garmin' }, [
+        el('td', null, [el('i', { class: 'ra-dot', style: 'background:' + MODEL_COLORS.garmin }), el('strong', { text: 'Garmin' }),
+            el('div', { class: 'ra-muted small', text: 'What your head unit had set' })]),
+        el('td', { class: 'num', text: garmin ? garmin.watts + ' W' : '–' }),
+        el('td', { class: 'num', text: garmin && isNum(kg) ? (garmin.watts / kg).toFixed(2) : '–' }),
+        el('td', { class: 'ra-muted small', text: garmin ? 'from ' + garmin.date : 'Not in your files' }),
+        el('td'), el('td', { class: 'num ra-muted small', text: 'fallback' })
+    ]));
+    rows.push(el('tr', { 'data-model': 'manual' }, [
+        el('td', null, [el('i', { class: 'ra-dot', style: 'background:' + MODEL_COLORS.manual }), el('strong', { text: 'Manual' }),
+            el('div', { class: 'ra-muted small', text: 'Your entries, each valid for ' + s.defaultWindow + ' days' })]),
+        el('td', { class: 'num', text: manual ? manual.watts + ' W' : '–' }),
+        el('td', { class: 'num', text: manual && isNum(kg) ? (manual.watts / kg).toFixed(2) : '–' }),
+        el('td', { class: 'ra-muted small', text: manual ? manual.date + (manual.note ? ' · ' + manual.note : '') : 'None in the default window' }),
+        el('td'), el('td', { class: 'num ra-muted small', text: manual ? 'overrides' : '' })
+    ]));
+    $('raFtpTable').tBodies[0].replaceChildren(...rows);
+
+    /* The chosen model under every window the user keeps. */
+    const wbox = $('raFtpWindows');
+    wbox.hidden = s.windows.length < 2;
+    if (s.windows.length > 1) {
+        wbox.replaceChildren(el('h3', { text: modelLabel(s.ftpModel) + ' model across your windows' }),
+            el('div', { class: 'ra-chips' }, s.windows.map((d) => {
+                const e = (timelineAt(ftpTimelineFor(d), today) || { est: {} }).est[s.ftpModel];
+                return el('span', { class: 'ra-chip static' + (d === s.defaultWindow ? ' on' : ''), 'data-window': String(d) },
+                    el('span', { class: 'ra-chip-main', text: d + ' days: ' + (e ? Math.round(e.watts) + ' W' : '–') + (e && e.stale ? ' ⚠' : '') }));
+            })));
+    }
+    renderFtpChart();
+}
+
+/* Opens the ride an estimate came from, with its effort shaded. */
+async function openEffort(e) {
+    if (e && e.ride && (await openRide(e.ride.id))) setHighlight({ sec: e.sec, start: e.start });
+}
+
+function renderFtpChart() {
+    const st = rideState.ftp;
+    const box = $('raFtpChart');
+    const legend = $('raFtpLegend');
+    box.replaceChildren();
+    const s = rideState.settings;
+    if (!st.hidden) st.hidden = new Set(FTP_MODELS.map((m) => m.key).filter((k) => k !== s.ftpModel));
+    const pts = st.tl.points.filter((p) => p.date <= st.today);
+    const manual = s.ftpEntries;
+    const garmin = deviceFtpHistory(rideState.rides);
+
+    const series = ['manual', 'garmin'].concat(FTP_MODELS.map((m) => m.key));
+    legend.replaceChildren(...series.map((k) => el('button', {
+        type: 'button', class: 'ra-legend-toggle', 'data-series': k, 'aria-pressed': st.hidden.has(k) ? 'false' : 'true',
+        onclick: () => { if (st.hidden.has(k)) st.hidden.delete(k); else st.hidden.add(k); renderFtpChart(); }
+    }, [el('i', { class: 'ra-dot', style: 'background:' + MODEL_COLORS[k] }), k === 'manual' ? 'Manual' : k === 'garmin' ? 'Garmin' : modelLabel(k)])));
+
+    if (!pts.length && !manual.length && !garmin.length) {
+        box.appendChild(el('p', { class: 'ra-empty', text: 'Import rides with power to see your FTP over time.' }));
+        renderFtpReadout(null);
+        return;
+    }
+    const dates = pts.map((p) => p.date).concat(manual.map((m) => m.date), garmin.map((g) => g.date));
+    let first = dates.reduce((a, b) => (b < a ? b : a));
+    const last = st.today > first ? st.today : addDays(first, 1);
+    const span = Math.max(1, daysBetween(first, last));
+
+    const values = [];
+    for (const p of pts) for (const m of FTP_MODELS) if (!st.hidden.has(m.key) && p.est[m.key]) values.push(p.est[m.key].watts);
+    if (!st.hidden.has('manual')) manual.forEach((m) => values.push(m.watts));
+    if (!st.hidden.has('garmin')) garmin.forEach((g) => values.push(g.watts));
+    if (!values.length) values.push(200, 300);
+    let lo = Math.min(...values), hi = Math.max(...values);
+    const pad = Math.max(10, (hi - lo) * 0.15);
+    lo = Math.max(0, lo - pad);
+    hi += pad;
+
+    const W = Math.max(280, box.clientWidth || 800);
+    const small = W < 600;
+    const H = small ? 220 : 280;
+    const L = 46, R = 12, T = 10, B = 26;
+    const plotW = W - L - R, plotH = H - T - B;
+    const xOf = (date) => L + (daysBetween(first, date) / span) * plotW;
+    const yOf = (v) => T + plotH - ((v - lo) / (hi - lo)) * plotH;
+
+    const root = svg('svg', { width: W, height: H, viewBox: '0 0 ' + W + ' ' + H, class: 'ra-chart-svg', role: 'img',
+                              'aria-label': 'FTP estimates over time' });
+    root.appendChild(svg('rect', { x: L, y: T, width: plotW, height: plotH, class: 'ra-plot-bg' }));
+    for (const v of niceTicks(lo, hi, 4)) {
+        root.appendChild(svg('line', { x1: L, x2: L + plotW, y1: yOf(v), y2: yOf(v), class: 'ra-grid' }));
+        root.appendChild(svg('text', { x: L - 6, y: yOf(v) + 4, class: 'ra-tick', 'text-anchor': 'end' }, String(v)));
+    }
+    /* Month or year ticks, depending on the span. */
+    const yearly = span > 800;
+    for (let d = first.slice(0, 7) + '-01'; d <= last; ) {
+        if (d >= first) {
+            const x = xOf(d);
+            root.appendChild(svg('line', { x1: x, x2: x, y1: T, y2: T + plotH, class: 'ra-grid' }));
+            if (!small || d.slice(5, 7) === '01' || span < 200) {
+                root.appendChild(svg('text', { x, y: H - 8, class: 'ra-tick', 'text-anchor': 'middle' }, yearly ? d.slice(0, 4) : d.slice(0, 7)));
+            }
+        }
+        const [y, m] = d.split('-').map(Number);
+        const next = yearly ? (y + 1) + '-01-01' : (m === 12 ? (y + 1) + '-01-01' : y + '-' + pad2(m + 1) + '-01');
+        d = next;
+    }
+
+    /* Step lines; stale stretches drawn faint and dashed. */
+    const stepPaths = (key) => {
+        let solid = '', faint = '';
+        for (let i = 0; i < pts.length; i++) {
+            const e = pts[i].est[key];
+            if (!e) continue;
+            const x0 = xOf(pts[i].date);
+            const x1 = xOf(i + 1 < pts.length ? pts[i + 1].date : st.today);
+            const y = yOf(e.watts).toFixed(1);
+            const seg = 'M' + x0.toFixed(1) + ' ' + y + 'H' + Math.max(x0 + 1, x1).toFixed(1);
+            if (e.stale) faint += seg; else solid += seg;
+        }
+        return { solid, faint };
+    };
+    for (const m of FTP_MODELS) {
+        if (st.hidden.has(m.key)) continue;
+        const { solid, faint } = stepPaths(m.key);
+        const used = m.key === s.ftpModel;
+        if (faint) root.appendChild(svg('path', { d: faint, class: 'ra-ftp-line stale', stroke: MODEL_COLORS[m.key] }));
+        if (solid) root.appendChild(svg('path', { d: solid, class: 'ra-ftp-line' + (used ? ' used' : ''), stroke: MODEL_COLORS[m.key], 'data-model': m.key }));
+    }
+    if (!st.hidden.has('garmin') && garmin.length) {
+        let d = '';
+        garmin.forEach((g, i) => {
+            const x0 = xOf(g.date), x1 = xOf(i + 1 < garmin.length ? garmin[i + 1].date : st.today);
+            d += 'M' + x0.toFixed(1) + ' ' + yOf(g.watts).toFixed(1) + 'H' + Math.max(x0 + 1, x1).toFixed(1);
+        });
+        root.appendChild(svg('path', { d, class: 'ra-ftp-line garmin', stroke: MODEL_COLORS.garmin }));
+    }
+    if (!st.hidden.has('manual')) {
+        for (const m of manual) {
+            const x = xOf(m.date), y = yOf(m.watts);
+            root.appendChild(svg('path', { d: 'M' + x + ' ' + (y - 6) + 'L' + (x + 6) + ' ' + y + 'L' + x + ' ' + (y + 6) + 'L' + (x - 6) + ' ' + y + 'Z',
+                class: 'ra-ftp-manual', fill: MODEL_COLORS.manual }, svg('title', null, m.date + ': ' + m.watts + ' W' + (m.note ? ' (' + m.note + ')' : ''))));
+        }
+    }
+
+    const cross = svg('line', { y1: T, y2: T + plotH, class: 'ra-cross-line', visibility: 'hidden' });
+    root.appendChild(cross);
+    const overlay = svg('rect', { x: L, y: T, width: plotW, height: plotH, class: 'ra-overlay' });
+    root.appendChild(overlay);
+    box.appendChild(root);
+    st.chart = { xOf, first, span, L, plotW, cross };
+
+    const hover = (evt) => {
+        const rect = root.getBoundingClientRect();
+        const px = Math.min(L + plotW, Math.max(L, evt.clientX - rect.left));
+        const date = addDays(first, Math.round(((px - L) / plotW) * span));
+        cross.setAttribute('x1', xOf(date));
+        cross.setAttribute('x2', xOf(date));
+        cross.setAttribute('visibility', 'visible');
+        renderFtpReadout(date);
+    };
+    overlay.addEventListener('pointermove', hover);
+    overlay.addEventListener('pointerdown', hover);
+    overlay.addEventListener('pointerleave', () => { cross.setAttribute('visibility', 'hidden'); renderFtpReadout(null); });
+    renderFtpReadout(null);
+}
+
+function renderFtpReadout(date) {
+    const st = rideState.ftp;
+    const box = $('raFtpReadout');
+    if (!date) {
+        box.replaceChildren(el('span', { class: 'ra-muted', text: 'Hover the timeline for the estimates on a date · faint dashed stretches: no recent maximal effort' }));
+        return;
+    }
+    const p = timelineAt(st.tl, date);
+    const items = [el('span', { class: 'ra-readout-x', text: date })];
+    const a = activeFtp(date, null);
+    if (a) items.push(el('span', { class: 'ra-readout-item' }, ['In use ', el('strong', { text: Math.round(a.watts) + ' W' })]));
+    for (const m of FTP_MODELS) {
+        if (st.hidden.has(m.key)) continue;
+        const e = p && p.est[m.key];
+        items.push(el('span', { class: 'ra-readout-item' }, [el('i', { class: 'ra-dot', style: 'background:' + MODEL_COLORS[m.key] }),
+            m.label + ' ', el('strong', { text: e ? Math.round(e.watts) + ' W' : '–' }), e && e.stale ? ' ⚠' : '']));
+    }
+    box.replaceChildren(...items);
+}
+
 function renderAll() {
     renderLibrary();
     renderSettings();
@@ -2366,6 +2850,19 @@ function bindUi() {
     for (const id of ['raCurvePeriod', 'raCurveCompare', 'raCurveUnits', 'raCurveFrom', 'raCurveTo']) {
         $(id).addEventListener('change', renderPower);
     }
+    $('raRampBtn').addEventListener('click', () => {
+        const r = rideState.act && rideState.act.ride;
+        if (!r) return;
+        setRampTest(r.id, !isRampTest(r.id));
+        renderRampButton();
+    });
+    $('raFtpWindow').addEventListener('change', renderFtp);
+    $('raFtpModel').addEventListener('change', () => {
+        rideState.settings.ftpModel = $('raFtpModel').value;
+        saveSettings();
+        if (rideState.ftp && rideState.ftp.hidden) rideState.ftp.hidden.delete(rideState.settings.ftpModel);
+        renderFtp();
+    });
     $('raExcludeBtn').addEventListener('click', () => {
         const r = rideState.act && rideState.act.ride;
         if (!r) return;
@@ -2392,7 +2889,10 @@ function bindUi() {
             const w = $('raCurveChart').clientWidth;
             if (!rideState.curve || w === lastCurveW || !w) return;
             lastCurveW = w;
-            requestAnimationFrame(renderCurveChart);
+            requestAnimationFrame(() => {
+                renderCurveChart();
+                if (rideState.ftp) renderFtpChart();
+            });
         }).observe($('raViewPower'));
     }
 
@@ -2458,6 +2958,7 @@ function bindUi() {
         if (!confirm('Delete all ' + rideState.rides.length + ' stored rides from this browser? Your settings are kept.')) return;
         await dbClear();
         rideState.rides = [];
+        rideState.dataVersion++;
         rideState.act = null;
         rideState.current = null;
         setRoute('');
@@ -2476,8 +2977,12 @@ async function init() {
         $('raLibrarySummary').textContent = 'Browser storage is unavailable (' + (err.message || err) +
             '). Private windows often block it.';
     }
+    rideState.dataVersion++;
     renderAll();
     route();
+    /* Rides from before power curves existed get theirs in the background:
+       the FTP timeline needs them even if the power tab is never opened. */
+    ensureCurves().then((n) => { if (n && !$('raViewPower').hidden) renderPower(); }).catch(() => {});
 }
 
 rideState.ready = init();

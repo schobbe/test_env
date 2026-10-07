@@ -113,7 +113,11 @@ curves: all 87 durations (watts and start second) per ride against the
 generator, the period best and its ride attribution, backfilling a ride stored
 without a curve, periods and comparisons, opening a ride from a curve point,
 and excluding / re-including a ride. Computing the curve from raw instead of
-cleaned power fails 4 assertions.
+cleaned power fails 4 assertions. FTP models: every model against the
+generator (the 3-parameter fit to 0.01 W, the rest to 1e-6), the timeline's
+staleness rule on synthetic rides, the FTP in use (manual expiry, day-before
+rule, model switch, ramp marking) and the panel. Disabling the staleness rule
+fails 2.
 
 Breaking the compressed-timestamp rollover in `strava.js` fails 5 assertions,
 which is the control showing these tests can fail.
