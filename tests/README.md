@@ -108,7 +108,12 @@ search), settings validation and persistence, IndexedDB round trip, and the
 activity view: power cleaning rules, best efforts (watts and start second),
 power and HR zone seconds, decoupling, IF and TSS - all against the
 generator's numbers - plus chart panels, hover readout, the route marker,
-best-effort shading, FTP fallbacks, out-of-order opens and Back.
+best-effort shading, FTP fallbacks, out-of-order opens and Back. Power
+curves: all 87 durations (watts and start second) per ride against the
+generator, the period best and its ride attribution, backfilling a ride stored
+without a curve, periods and comparisons, opening a ride from a curve point,
+and excluding / re-including a ride. Computing the curve from raw instead of
+cleaned power fails 4 assertions.
 
 Breaking the compressed-timestamp rollover in `strava.js` fails 5 assertions,
 which is the control showing these tests can fail.

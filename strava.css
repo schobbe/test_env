@@ -718,6 +718,93 @@ code {
     fill-opacity: 0.16;
 }
 
+.ra-head-actions {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+#raExcludeBtn[aria-pressed="true"] {
+    border-color: var(--ra-amber);
+    color: var(--ra-amber);
+}
+
+/* ---------- Power curve ---------- */
+.ra-curve-custom {
+    margin-bottom: 8px;
+}
+
+.ra-legend {
+    display: flex;
+    gap: 16px;
+    flex-wrap: wrap;
+    font-size: 0.85em;
+    color: var(--ra-muted);
+    margin-bottom: 4px;
+}
+
+.ra-legend-item,
+.ra-readout-item {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.ra-swatch {
+    display: inline-block;
+    width: 16px;
+    height: 0;
+    border-top: 2.5px solid var(--ra-amber);
+}
+
+.ra-swatch.cmp {
+    border-top: 2px dashed var(--ra-muted);
+}
+
+.ra-readout-item i.ra-swatch {
+    width: 16px;
+    height: 0;
+    border-radius: 0;
+    margin-right: 0;
+}
+
+.ra-curve-cur {
+    fill: none;
+    stroke: var(--ra-amber);
+    stroke-width: 2.5;
+    stroke-linejoin: round;
+}
+
+.ra-curve-cmp {
+    fill: none;
+    stroke: var(--ra-muted);
+    stroke-width: 1.6;
+    stroke-dasharray: 5 4;
+}
+
+.ra-cross-dot.cur { fill: var(--ra-amber); }
+.ra-cross-dot.cmp { fill: var(--ra-muted); }
+
+.ra-overlay.clickable {
+    cursor: pointer;
+}
+
+.ra-up { color: var(--ra-green); }
+.ra-down { color: var(--ra-red); }
+
+.ra-excluded {
+    margin-top: 14px;
+}
+
+.ra-excluded-list {
+    margin: 0;
+    padding-left: 18px;
+}
+
+.ra-excluded-list li {
+    margin: 4px 0;
+}
+
 /* ---------- Activity: route ---------- */
 .ra-map {
     width: 100%;

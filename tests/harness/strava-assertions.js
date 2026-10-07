@@ -373,6 +373,113 @@
             eq('I4 rides listed but not picked are missing', rep.skipped.missingFile.length, 3);
             eq('I4 run listed but not picked counts as not cycling', rep.skipped.notCycling.length, 1);
 
+            /* --- W: power curves --- */
+            eq('W0 duration grid matches the generator', JSON.stringify(MMP_DURATIONS), JSON.stringify(E.mmpDurations));
+            function curveMatches(actual, want) {
+                if (!actual) return 'no curve';
+                for (var i = 0; i < want.w.length; i++) {
+                    var a = actual.w[i], b = want.w[i];
+                    if (b === null ? !Number.isNaN(a) : Math.abs(a - b) > 1e-3) return 'w[' + i + '] ' + a + ' vs ' + b;
+                    if (actual.s[i] !== want.s[i]) return 's[' + i + '] ' + actual.s[i] + ' vs ' + want.s[i];
+                }
+                return '';
+            }
+            var morning = rideState.rides.find(function (x) { return x.id === 'r' + R.startUnix; });
+            var indoor = rideState.rides.find(function (x) { return x.id === 'r' + E.edge_cases.startUnix; });
+            var why = curveMatches(morning.curve, R.curve);
+            ok('W1 ride curve: watts and start second for all 87 durations', why === '', why);
+            why = curveMatches(indoor.curve, E.edge_cases.curve);
+            ok('W1 indoor ride curve', why === '', why);
+
+            var both = periodCurve([indoor, morning]);
+            var maxOk = true, whoOk = true;
+            for (var k = 0; k < MMP_DURATIONS.length; k++) {
+                var mw = R.curve.w[k], iw = E.edge_cases.curve.w[k];
+                var want = mw === null && iw === null ? null : Math.max(mw === null ? -1 : mw, iw === null ? -1 : iw);
+                if (want === null ? !Number.isNaN(both.w[k]) : Math.abs(both.w[k] - want) > 1e-3) maxOk = false;
+                if (want !== null && both.ride[k].id !== (mw !== null && mw >= (iw === null ? -1 : iw) ? morning.id : indoor.id)) whoOk = false;
+            }
+            ok('W2 period curve is the element-wise best', maxOk, '');
+            ok('W2 each point names the ride it came from (ties go to the earlier ride)', whoOk, '');
+
+            morning.curve = null;
+            await dbPutSummary(morning);
+            eq('W3 a ride without a curve is backfilled from its streams', await ensureCurves(), 1);
+            why = curveMatches(morning.curve, R.curve);
+            ok('W3 backfilled curve is identical', why === '', why);
+            var storedMorning = (await dbAllRides()).find(function (x) { return x.id === morning.id; });
+            ok('W3 and saved', Boolean(storedMorning.curve) && storedMorning.curve.v === CURVE_VERSION, '');
+
+            rideState.today = '2026-10-07';
+            await showPower();
+            eq('W4 route', location.hash, '#power');
+            ok('W4 power view shown', !q('#raViewPower').hidden && q('#raViewActivities').hidden, '');
+            eq('W4 default period is the default window', q('#raCurvePeriod').value, 'last:90');
+            ok('W4 summary', /^2 rides with power, 2026-07-10 – 2026-10-07/.test(q('#raCurveSummary').textContent), q('#raCurveSummary').textContent);
+            ok('W4 curve drawn', (q('#raCurveChart .ra-curve-cur').getAttribute('d') || '').length > 200, '');
+            ok('W4 comparison drawn', Boolean(q('#raCurveChart .ra-curve-cmp')), '');
+            var keyRows = qa('#raCurveTable tbody tr');
+            eq('W4 key durations', keyRows.map(function (tr) { return tr.children[0].textContent; }).join(','), '5 s,1 min,5 min,20 min,1 h');
+            var row20c = keyRows[3];
+            eq('W4 20 min best', row20c.children[1].textContent, Math.round(R.bestEfforts['1200'].watts) + ' W');
+            ok('W4 20 min names its ride', /Morning ride.*2026-09-12/.test(row20c.children[3].textContent), row20c.children[3].textContent);
+            eq('W4 no hour in rides under an hour', keyRows[4].children[1].textContent, '–');
+
+            var ov = q('#raCurveChart .ra-overlay');
+            var ovb = ov.getBoundingClientRect();
+            ov.dispatchEvent(new PointerEvent('pointermove', { clientX: ovb.left + ovb.width * 0.6, clientY: ovb.top + 10, bubbles: true }));
+            ok('W5 hover readout names value and ride', /\d+ W · (Morning ride|Indoor session)/.test(q('#raCurveReadout').textContent),
+                q('#raCurveReadout').textContent);
+
+            q('#raCurveFrom').value = '2026-09-13';
+            q('#raCurveTo').value = '2026-09-13';
+            q('#raCurvePeriod').value = 'custom';
+            q('#raCurveCompare').value = 'previous';
+            q('#raCurvePeriod').dispatchEvent(new Event('change'));
+            ok('W6 custom range', !q('#raCurveCustom').hidden && /^1 ride with power, 2026-09-13 – 2026-09-13/.test(q('#raCurveSummary').textContent),
+                q('#raCurveSummary').textContent);
+            ok('W6 previous period is the day before', /2026-09-12 – 2026-09-12/.test(q('#raCurveLegend').textContent), q('#raCurveLegend').textContent);
+            var row1m = qa('#raCurveTable tbody tr')[1];
+            var wantDelta = Math.round(E.edge_cases.curve.w[MMP_DURATIONS.indexOf(60)] - R.curve.w[MMP_DURATIONS.indexOf(60)]);
+            eq('W6 delta against the previous period', row1m.children[5].textContent, (wantDelta > 0 ? '+' : '') + wantDelta + ' W');
+
+            q('#raCurvePeriod').value = 'lastyear';
+            q('#raCurvePeriod').dispatchEvent(new Event('change'));
+            ok('W7 empty period explained', /No rides with power/.test(q('#raCurveChart').textContent), q('#raCurveChart').textContent);
+
+            q('#raCurvePeriod').value = 'all';
+            q('#raCurveCompare').value = 'best';
+            q('#raCurveUnits').value = 'wkg';
+            q('#raCurvePeriod').dispatchEvent(new Event('change'));
+            eq('W8 W/kg axis', q('#raCurveChart .ra-panel-label').textContent, 'W/kg');
+            q('#raCurveUnits').value = 'w';
+            q('#raCurveUnits').dispatchEvent(new Event('change'));
+
+            await openFromCurve(MMP_DURATIONS.indexOf(1200));
+            eq('W9 clicking a point opens its ride', rideState.act && rideState.act.ride.id, morning.id);
+            eq('W9 with that effort shaded', JSON.stringify(rideState.act.highlight),
+                JSON.stringify({ sec: 1200, start: R.bestEfforts['1200'].start }));
+            ok('W9 shading drawn', Boolean(q('#raChart .ra-hl-rect')), '');
+            history.back();
+            await waitFor(function () { return !q('#raViewPower').hidden; }, 100);
+            ok('W9 Back returns to the power view', !q('#raViewPower').hidden && location.hash === '#power', location.hash);
+
+            await openRide(morning.id);
+            eq('W10 exclude button shown for a ride with power', q('#raExcludeBtn').hidden, false);
+            q('#raExcludeBtn').click();
+            eq('W10 pressed', q('#raExcludeBtn').getAttribute('aria-pressed'), 'true');
+            ok('W10 persisted', loadSettings().excluded.indexOf(morning.id) !== -1, JSON.stringify(loadSettings().excluded));
+            await showPower();
+            ok('W10 excluded ride leaves the curve', /^1 ride with power.*1 excluded/.test(q('#raCurveSummary').textContent),
+                q('#raCurveSummary').textContent);
+            ok('W10 and is listed', !q('#raExcluded').hidden && /Morning ride/.test(q('#raExcluded').textContent), '');
+            q('#raExcluded [data-include]').click();
+            ok('W10 including it again restores it', /^2 rides with power/.test(q('#raCurveSummary').textContent) && q('#raExcluded').hidden,
+                q('#raCurveSummary').textContent);
+
+            eq('W11 durations read naturally', [5, 75, 1200, 4500, 7200].map(fmtSpan).join(' | '), '5 s | 1:15 min | 20 min | 1 h 15 min | 2 h');
+            q('#raBackBtn').click();
+
             /* --- S: settings --- */
             var s = rideState.settings;
             eq('S1 default window', s.defaultWindow, 90);

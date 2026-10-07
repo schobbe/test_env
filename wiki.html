@@ -81,7 +81,7 @@
                         <tr><td><code>index.html</code></td><td>Landing page, project cards, counter demo</td><td><code>style.css</code>, <code>script.js</code></td></tr>
                         <tr><td><code>map.html</code></td><td>World Explorer map and weather dashboard</td><td><code>style.css</code>, <code>map.js</code>, Leaflet (unpkg)</td></tr>
                         <tr><td><code>bf6.html</code></td><td>BF6 statistics dashboard markup — one <code>.bf-panel</code> per feature</td><td><code>bf6.css</code>, <code>bf6.js</code></td></tr>
-                        <tr><td><code>strava.html</code></td><td>Ride Analytics markup — five tabbed views, two built so far</td><td><code>strava.css</code>, <code>strava.js</code></td></tr>
+                        <tr><td><code>strava.html</code></td><td>Ride Analytics markup — five tabbed views, three built so far</td><td><code>strava.css</code>, <code>strava.js</code></td></tr>
                         <tr><td><code>strava.css</code>, <code>strava.js</code></td><td>Ride Analytics theme (<code>--ra-*</code>, same palette as BF6) and logic: FIT decoder, ZIP reader, IndexedDB storage. Zero dependencies.</td><td>—</td></tr>
                         <tr><td><code>wiki.html</code></td><td>This wiki</td><td><code>style.css</code></td></tr>
                         <tr><td><code>style.css</code></td><td>Shared styles for the landing page, map and wiki. Map and wiki rules are namespaced so they cannot leak onto the landing page.</td><td>—</td></tr>
@@ -730,7 +730,29 @@ python -m http.server 8500
                     to wherever you opened it from.
                 </p>
 
-                <h3>9.4 Settings</h3>
+                <h3>9.4 Power curve</h3>
+                <p>
+                    Every ride stores its <strong>mean-maximal power curve</strong>: the best average power for 87
+                    durations from 1 s to 6 h (every second up to 20 s, then 5 s, 15 s, 1 min, 5 min and 15 min steps),
+                    and the elapsed second each best started. It uses the same cleaned, pause-as-zero grid as the
+                    best-efforts table, so the two always agree. Curves are computed at import; rides stored before
+                    curves existed get theirs from their saved streams the first time the tab opens.
+                </p>
+                <p>
+                    The <em>Power &amp; FTP</em> tab (<code>strava.html#power</code>) takes the element-wise best
+                    over all rides in a period — your estimation windows, this year, last year, all time or a
+                    custom range — so each point is a single real effort, and remembers which ride it came from
+                    (on a tie, the earlier one). It compares against the all-time best or the previous period of the
+                    same length, in W or W/kg (each point divided by the weight that applied to its ride). Clicking
+                    the curve or a key-duration row opens that ride with the effort shaded.
+                </p>
+                <p>
+                    A ride with bad power data — a miscalibrated meter, a trainer reading wild — can be excluded from
+                    its ride page. The exclusion list lives in the settings, not on the ride, so it survives
+                    re-importing, and it will apply to the FTP models too.
+                </p>
+
+                <h3>9.5 Settings</h3>
                 <ul class="wiki-list">
                     <li><strong>Weight, max HR, threshold HR</strong> — empty means "use what the Garmin recorded in the latest ride".</li>
                     <li><strong>FTP estimation windows</strong> — how far back the FTP models look for best efforts. Default 90 days; any number of extra windows (7–730 days) can be added for comparison, and any of them made the default.</li>
@@ -738,16 +760,16 @@ python -m http.server 8500
                 </ul>
                 <p>All three live in <code>localStorage</code> (<code>rides.settings.v1</code>); rides live in IndexedDB.</p>
 
-                <h3>9.5 Roadmap</h3>
+                <h3>9.6 Roadmap</h3>
                 <ol class="wiki-list">
                     <li>Import and ride list — <strong>done</strong>.</li>
                     <li>Single activity: charts, zones, best efforts, route — <strong>done</strong>.</li>
-                    <li>Power curves (mean-maximal power for every duration).</li>
+                    <li>Power curves (mean-maximal power for every duration) — <strong>done</strong>.</li>
                     <li>FTP models and the FTP timeline: 20-min, 8-min, 60-min, ramp, 2- and 3-parameter critical power, power-law fit, Garmin-recorded and manual.</li>
                     <li>Period overview, and fitness &amp; trends (CTL / ATL / TSB).</li>
                 </ol>
 
-                <h3>9.6 Tests</h3>
+                <h3>9.7 Tests</h3>
 <pre class="wiki-pre">powershell -NoProfile -ExecutionPolicy Bypass -File tests\Run-StravaTests.ps1</pre>
                 <p>
                     Synthetic fixtures come from <code>tests/fixtures/make_strava_fixtures.py</code> (standard library

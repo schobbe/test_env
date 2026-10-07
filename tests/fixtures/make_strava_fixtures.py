@@ -199,9 +199,28 @@ def elapsed_power_grid(samples):
     return grid
 
 
-def best_efforts(grid):
+def mmp_durations():
+    """Mean-maximal power durations: dense where curves bend, sparse where
+    they are flat. Mirrors MMP_DURATIONS in strava.js."""
+    out = []
+    for start, stop, step in [(1, 20, 1), (25, 60, 5), (75, 300, 15), (360, 1200, 60),
+                              (1500, 3600, 300), (4500, 21600, 900)]:
+        out.extend(range(start, stop + 1, step))
+    return out
+
+
+def power_curve(samples):
+    """The ride's mean-maximal curve on MMP durations: watts and start second,
+    None where the ride is shorter than the duration."""
+    cleaned, _ = clean_power(samples)
+    efforts = best_efforts(elapsed_power_grid(cleaned), mmp_durations())
+    return {'w': [efforts[str(d)]['watts'] if str(d) in efforts else None for d in mmp_durations()],
+            's': [efforts[str(d)]['start'] if str(d) in efforts else -1 for d in mmp_durations()]}
+
+
+def best_efforts(grid, durations=BEST_EFFORT_S):
     out = {}
-    for d in BEST_EFFORT_S:
+    for d in durations:
         if d > len(grid):
             continue
         acc = sum(grid[:d])
@@ -428,6 +447,7 @@ def make_ride():
         'dropout': [2400, 2405],
     })
     expected.update(analyse(samples, RIDE_FTP, RIDE_LTHR))
+    expected['curve'] = power_curve(samples)
     return w.finish(), expected
 
 
@@ -482,6 +502,7 @@ def make_edge_cases():
         'lastUnix': samples[-1]['t'],
         'altitudeM': 250,
     })
+    expected['curve'] = power_curve(samples)
     return w.finish(), expected
 
 
@@ -573,6 +594,7 @@ def main():
         print('%-28s %8d bytes' % (name, len(data)))
 
     expected = {'sample_ride': ride_expected, 'edge_cases': edge_expected,
+                'mmpDurations': mmp_durations(),
                 'export': {'rides': 2, 'notCycling': 1, 'unsupportedFormat': 1,
                            'noFile': 1, 'missingFile': 1}}
     with open(os.path.join(OUT, 'expected.json'), 'w', encoding='utf-8', newline='\n') as f:

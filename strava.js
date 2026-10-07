@@ -58,6 +58,19 @@ const HR_MAX_ZONE_LOWS = [0, 0.60, 0.70, 0.80, 0.90];                 /* x max H
 const HR_MAX_ZONE_NAMES = ['Very light', 'Light', 'Moderate', 'Hard', 'Maximum'];
 const ZONE_COLORS = ['#64748b', '#38bdf8', '#34d399', '#facc15', '#fb923c', '#f87171', '#c084fc'];
 
+/* Mean-maximal power durations: dense where curves bend, sparse where they
+   are flat. 87 points from 1 s to 6 h. */
+const MMP_DURATIONS = [[1, 20, 1], [25, 60, 5], [75, 300, 15], [360, 1200, 60], [1500, 3600, 300], [4500, 21600, 900]]
+    .flatMap(([from, to, step]) => Array.from({ length: Math.floor((to - from) / step) + 1 }, (_, k) => from + k * step));
+
+/* Bump when the stored curve changes; older ones are recomputed from the
+   stored streams on the next visit, no re-import needed. */
+const CURVE_VERSION = 1;
+
+/* The durations the power view tabulates. */
+const CURVE_KEY_S = [5, 60, 300, 1200, 3600];
+const CURVE_TICKS_S = [1, 5, 15, 60, 300, 1200, 3600, 10800, 21600];
+
 /* Chart channels, in display order. */
 const CHANNELS = [
     { key: 'power', label: 'Power', unit: 'W', color: '#f59e0b', zero: true, digits: 0 },
@@ -564,6 +577,23 @@ function hrReference(ride) {
     return null;
 }
 
+/* The ride's mean-maximal power curve on MMP_DURATIONS: best average watts
+   and the elapsed second it started, NaN / -1 past the ride's length. Same
+   grid and cleaning as the best-efforts table, so the two always agree. */
+function rideCurve(streams) {
+    if (!streams.power) return null;
+    const grid = elapsedPowerGrid(streams.t, cleanPower(streams.power).power);
+    const w = new Float32Array(MMP_DURATIONS.length).fill(NaN);
+    const s = new Int32Array(MMP_DURATIONS.length).fill(-1);
+    const efforts = bestEfforts(grid, MMP_DURATIONS);
+    for (const e of efforts) {
+        const i = MMP_DURATIONS.indexOf(e.sec);
+        w[i] = e.watts;
+        s[i] = e.start;
+    }
+    return { v: CURVE_VERSION, w, s };
+}
+
 /* Everything the activity view derives from the streams. */
 function analyseRide(ride, streams) {
     const w = sampleWeights(streams.t);
@@ -717,7 +747,8 @@ function buildRide(buffer, meta, sourceName) {
         warnings: fit.warnings,
         source: sourceName,
         parser: PARSER_VERSION,
-        importedAt: Date.now()
+        importedAt: Date.now(),
+        curve: rideCurve(streams)
     }, summarise(fit, streams));
 
     return { ride, streams: Object.assign({ id: ride.id }, streams), cycling: isCyclingFit(fit) };
@@ -898,6 +929,14 @@ async function dbPutRide(ride, streams) {
     await txDone(tx);
 }
 
+/* Summary only - for derived fields added after import (curves). */
+async function dbPutSummary(ride) {
+    const db = await openDb();
+    const tx = db.transaction('rides', 'readwrite');
+    tx.objectStore('rides').put(ride);
+    await txDone(tx);
+}
+
 async function dbAllRides() {
     const db = await openDb();
     return reqDone(db.transaction('rides').objectStore('rides').getAll());
@@ -920,7 +959,8 @@ async function dbClear() {
 
 function defaultSettings() {
     return { weightKg: null, maxHr: null, lthr: null, ftpEntries: [],
-             windows: [DEFAULT_WINDOW_DAYS], defaultWindow: DEFAULT_WINDOW_DAYS };
+             windows: [DEFAULT_WINDOW_DAYS], defaultWindow: DEFAULT_WINDOW_DAYS,
+             excluded: [] };
 }
 
 function loadSettings() {
@@ -938,6 +978,8 @@ function loadSettings() {
             }
             if (s.windows.includes(raw.defaultWindow)) s.defaultWindow = raw.defaultWindow;
             else if (!s.windows.includes(s.defaultWindow)) s.defaultWindow = s.windows[0];
+            /* Kept here, not on the ride, so it survives a re-import. */
+            if (Array.isArray(raw.excluded)) s.excluded = raw.excluded.filter((id) => typeof id === 'string' && /^r\d+$/.test(id));
         }
     } catch (e) { /* unreadable or blocked storage: defaults */ }
     return s;
@@ -1146,6 +1188,7 @@ async function importFiles(fileList) {
         showProgress(false);
         renderAll();
         renderReport(report);
+        if (!$('raViewPower').hidden) showPower(true);
     }
     return report;
 }
@@ -1353,10 +1396,21 @@ function renderList() {
 
 function showView(view) {
     for (const tab of document.querySelectorAll('.ra-tab')) {
-        tab.setAttribute('aria-selected', tab.dataset.view === view ? 'true' : 'false');
+        const on = tab.dataset.view === view;
+        tab.setAttribute('aria-selected', on ? 'true' : 'false');
+        /* On a phone the strip scrolls sideways; keep the active tab in it
+           (scrollLeft only - scrollIntoView could also move the page). */
+        const strip = tab.parentElement;
+        if (on && strip.scrollWidth > strip.clientWidth) {
+            const left = tab.offsetLeft - strip.offsetLeft;
+            if (left < strip.scrollLeft || left + tab.offsetWidth > strip.scrollLeft + strip.clientWidth) {
+                strip.scrollLeft = left - (strip.clientWidth - tab.offsetWidth) / 2;
+            }
+        }
     }
     $('raViewActivities').hidden = view !== 'activities';
     $('raViewActivity').hidden = view !== 'activity';
+    $('raViewPower').hidden = view !== 'power';
 }
 
 /* ------------------------------ ROUTING -------------------------------- */
@@ -1371,6 +1425,7 @@ function setRoute(hash) {
 function route() {
     const m = /^#ride=(r\d+)$/.exec(location.hash);
     if (m && rideState.rides.some((r) => r.id === m[1])) openRide(m[1], true);
+    else if (location.hash === '#power') showPower(true);
     else showView('activities');
 }
 
@@ -1389,10 +1444,17 @@ function svg(tag, attrs, children) {
     return node;
 }
 
+/* A duration as people say it: 5 s, 1:15 min, 20 min, 1 h 15 min. */
 function fmtSpan(sec) {
     if (sec < 60) return sec + ' s';
-    if (sec < 3600) return sec / 60 + ' min';
-    return sec / 3600 + ' h';
+    if (sec < 3600) {
+        const m = Math.floor(sec / 60);
+        const s = sec % 60;
+        return s ? m + ':' + pad2(s) + ' min' : m + ' min';
+    }
+    const h = Math.floor(sec / 3600);
+    const m = Math.round((sec % 3600) / 60);
+    return m ? h + ' h ' + m + ' min' : h + ' h';
 }
 
 function weightFor(ride) {
@@ -1891,12 +1953,393 @@ async function openRide(id, fromHistory) {
         return false;
     }
     rideState.act = { ride: r, streams, analysis: analyseRide(r, streams), highlight: null, hover: null, chart: null, map: null };
+    renderExcludeButton();
     renderActTiles();
     renderChart();
     renderMap();
     renderBest();
     renderZones();
     return true;
+}
+
+/* ----------------------------- POWER CURVE ----------------------------- */
+
+const pad2 = (n) => String(n).padStart(2, '0');
+
+/* Local calendar date; tests pin it through rideState.today. */
+function todayStr() {
+    if (rideState.today) return rideState.today;
+    const d = new Date();
+    return d.getFullYear() + '-' + pad2(d.getMonth() + 1) + '-' + pad2(d.getDate());
+}
+
+function addDays(date, n) {
+    const d = new Date(date + 'T00:00:00Z');
+    d.setUTCDate(d.getUTCDate() + n);
+    return d.toISOString().slice(0, 10);
+}
+
+function daysBetween(a, b) {
+    return Math.round((Date.parse(b + 'T00:00:00Z') - Date.parse(a + 'T00:00:00Z')) / 86400000);
+}
+
+const ALL_TIME = { from: '0000-01-01', to: '9999-12-31', all: true };
+
+/* Period key -> inclusive range of local ride dates. */
+function periodRange(key) {
+    const today = todayStr();
+    const year = Number(today.slice(0, 4));
+    const m = /^last:(\d+)$/.exec(key);
+    if (m) return { from: addDays(today, -(Number(m[1]) - 1)), to: today };
+    if (key === 'year') return { from: year + '-01-01', to: today };
+    if (key === 'lastyear') return { from: (year - 1) + '-01-01', to: (year - 1) + '-12-31' };
+    if (key === 'custom') {
+        let from = $('raCurveFrom').value;
+        let to = $('raCurveTo').value;
+        if (!from || !to) return Object.assign({}, ALL_TIME, { from: from || ALL_TIME.from, to: to || ALL_TIME.to });
+        if (from > to) [from, to] = [to, from];
+        return { from, to };
+    }
+    return ALL_TIME;
+}
+
+/* The same number of days immediately before; none for open-ended ranges. */
+function previousRange(range) {
+    if (range.all) return null;
+    const len = daysBetween(range.from, range.to) + 1;
+    const to = addDays(range.from, -1);
+    return { from: addDays(to, -(len - 1)), to };
+}
+
+const isExcluded = (id) => rideState.settings.excluded.includes(id);
+
+function setExcluded(id, on) {
+    const s = rideState.settings;
+    s.excluded = s.excluded.filter((x) => x !== id);
+    if (on) s.excluded.push(id);
+    saveSettings();
+}
+
+function powerRides(range) {
+    return rideState.rides.filter((r) => r.curve && !isExcluded(r.id) &&
+        fmtDate(r) >= range.from && fmtDate(r) <= range.to);
+}
+
+/* Element-wise best over the rides, remembering which ride and second each
+   point came from. Oldest first, so on a tie the first time it was ridden wins. */
+function periodCurve(rides) {
+    const n = MMP_DURATIONS.length;
+    const w = new Float64Array(n).fill(NaN);
+    const ride = new Array(n).fill(null);
+    const start = new Int32Array(n).fill(-1);
+    const sorted = rides.slice().sort((a, b) => a.startUnix - b.startUnix);
+    for (const r of sorted) {
+        for (let i = 0; i < n; i++) {
+            const v = r.curve.w[i];
+            if (!Number.isNaN(v) && !(v <= w[i])) { w[i] = v; ride[i] = r; start[i] = r.curve.s[i]; }
+        }
+    }
+    return { w, ride, start, count: sorted.length };
+}
+
+/* Rides imported before curves existed (or under an older curve version) get
+   one computed from their stored streams. Shared promise: one pass at a time. */
+function ensureCurves() {
+    if (rideState.curvesPending) return rideState.curvesPending;
+    const todo = rideState.rides.filter((r) => r.channels.includes('power') && (!r.curve || r.curve.v !== CURVE_VERSION));
+    if (!todo.length) return Promise.resolve(0);
+    rideState.curvesPending = (async () => {
+        try {
+            for (let i = 0; i < todo.length; i++) {
+                $('raCurveStatus').textContent = 'Preparing power curves: ' + (i + 1) + ' of ' + todo.length + '…';
+                const streams = await dbStreams(todo[i].id);
+                todo[i].curve = streams ? rideCurve(streams) : null;
+                await dbPutSummary(todo[i]);
+                if (i % 5 === 4) await new Promise((r) => setTimeout(r, 0));
+            }
+            return todo.length;
+        } finally {
+            rideState.curvesPending = null;
+            $('raCurveStatus').textContent = '';
+        }
+    })();
+    return rideState.curvesPending;
+}
+
+async function showPower(fromHistory) {
+    if (!fromHistory) setRoute('power');
+    showView('power');
+    await ensureCurves();
+    renderPower();
+}
+
+function renderPeriodOptions() {
+    const sel = $('raCurvePeriod');
+    const s = rideState.settings;
+    const current = sel.value || 'last:' + s.defaultWindow;
+    const opts = s.windows.map((d) => ['last:' + d, 'Last ' + d + ' days' + (d === s.defaultWindow ? ' (default)' : '')])
+        .concat([['year', 'This year'], ['lastyear', 'Last year'], ['all', 'All time'], ['custom', 'Custom range']]);
+    sel.replaceChildren(...opts.map(([v, t]) => el('option', { value: v, text: t })));
+    sel.value = opts.some(([v]) => v === current) ? current : 'last:' + s.defaultWindow;
+}
+
+/* Watts, or W/kg with the weight that applied to the ride the point came from. */
+function curveValue(curve, i, wkg) {
+    const v = curve.w[i];
+    if (!wkg || Number.isNaN(v)) return v;
+    const kg = weightFor(curve.ride[i]);
+    return isNum(kg) ? v / kg : NaN;
+}
+
+function fmtRange(range) {
+    if (range.all && range.from === ALL_TIME.from && range.to === ALL_TIME.to) return 'all time';
+    if (range.from === ALL_TIME.from) return 'up to ' + range.to;
+    if (range.to === ALL_TIME.to) return 'from ' + range.from;
+    return range.from + ' – ' + range.to;
+}
+
+function renderPower() {
+    renderPeriodOptions();
+    const key = $('raCurvePeriod').value;
+    $('raCurveCustom').hidden = key !== 'custom';
+    const range = periodRange(key);
+    const cur = periodCurve(powerRides(range));
+    const mode = $('raCurveCompare').value;
+    let cmp = null;
+    let cmpLabel = '';
+    if (mode === 'best') {
+        cmp = periodCurve(powerRides(ALL_TIME));
+        cmpLabel = 'All-time best';
+    } else if (mode === 'previous') {
+        const prev = previousRange(range);
+        if (prev) {
+            cmp = periodCurve(powerRides(prev));
+            cmpLabel = 'Previous period (' + fmtRange(prev) + ')';
+        } else {
+            cmpLabel = 'No previous period for an open-ended range';
+        }
+    }
+    const wkg = $('raCurveUnits').value === 'wkg';
+    rideState.curve = { range, cur, cmp, cmpLabel, wkg, chart: null };
+
+    const excludedCount = rideState.settings.excluded.filter((id) => rideState.rides.some((r) => r.id === id)).length;
+    $('raCurveSummary').textContent = cur.count + ' ride' + (cur.count === 1 ? '' : 's') + ' with power, ' + fmtRange(range) +
+        (excludedCount ? ' · ' + excludedCount + ' excluded' : '');
+    $('raCurveLegend').replaceChildren(
+        el('span', { class: 'ra-legend-item' }, [el('i', { class: 'ra-swatch cur' }), 'Selected period']),
+        cmpLabel ? el('span', { class: 'ra-legend-item' }, [el('i', { class: 'ra-swatch cmp' }), cmpLabel]) : null
+    );
+    renderCurveChart();
+    renderCurveTable();
+    renderExcludedList();
+}
+
+function lastIndexWithData(...curves) {
+    let last = -1;
+    for (const c of curves) {
+        if (!c) continue;
+        for (let i = 0; i < c.w.length; i++) if (!Number.isNaN(c.w[i]) && i > last) last = i;
+    }
+    return last;
+}
+
+function fmtTick(d) {
+    if (d < 60) return d + 's';
+    if (d < 3600) return d / 60 + 'm';
+    return d / 3600 + 'h';
+}
+
+function renderCurveChart() {
+    const st = rideState.curve;
+    const box = $('raCurveChart');
+    box.replaceChildren();
+    const last = lastIndexWithData(st.cur, st.cmp);
+    if (!st.cur.count || last < 1) {
+        box.appendChild(el('p', { class: 'ra-empty', text: st.cur.count ? 'Not enough data for a curve.' : 'No rides with power in this period.' }));
+        renderCurveReadout(null);
+        return;
+    }
+
+    const W = Math.max(280, box.clientWidth || 800);
+    const small = W < 600;
+    const H = small ? 240 : 320;
+    const L = 48, R = 14, T = 10, B = 26;
+    const plotW = W - L - R;
+    const plotH = H - T - B;
+    const dMax = MMP_DURATIONS[last];
+    const lnMax = Math.log(dMax);
+    const lx = (d) => L + (Math.log(d) / lnMax) * plotW;
+
+    const series = [st.cmp, st.cur].filter(Boolean).map((c) => MMP_DURATIONS.map((_, i) => (i <= last ? curveValue(c, i, st.wkg) : NaN)));
+    const finite = series.flat().filter((v) => !Number.isNaN(v));
+    const yMax = Math.max(...finite) * 1.08;
+    const ly = (v) => T + plotH - (v / yMax) * plotH;
+    const digits = st.wkg ? 1 : 0;
+
+    const root = svg('svg', { width: W, height: H, viewBox: '0 0 ' + W + ' ' + H, class: 'ra-chart-svg',
+                              role: 'img', 'aria-label': 'Power curve, best average power by duration' });
+    root.appendChild(svg('rect', { x: L, y: T, width: plotW, height: plotH, class: 'ra-plot-bg' }));
+    for (const v of niceTicks(0, yMax, small ? 3 : 5)) {
+        root.appendChild(svg('line', { x1: L, x2: L + plotW, y1: ly(v), y2: ly(v), class: 'ra-grid' }));
+        root.appendChild(svg('text', { x: L - 6, y: ly(v) + 4, class: 'ra-tick', 'text-anchor': 'end' }, v.toFixed(st.wkg ? 1 : 0)));
+    }
+    for (const d of CURVE_TICKS_S.filter((d) => d <= dMax)) {
+        root.appendChild(svg('line', { x1: lx(d), x2: lx(d), y1: T, y2: T + plotH, class: 'ra-grid' }));
+        root.appendChild(svg('text', { x: lx(d), y: H - 8, class: 'ra-tick', 'text-anchor': 'middle' }, fmtTick(d)));
+    }
+    root.appendChild(svg('text', { x: L + 6, y: T + 14, class: 'ra-panel-label', fill: 'var(--ra-muted)' }, st.wkg ? 'W/kg' : 'Watts'));
+
+    const pathOf = (vals) => {
+        let d = '';
+        let pen = false;
+        vals.forEach((v, i) => {
+            if (Number.isNaN(v)) { pen = false; return; }
+            d += (pen ? 'L' : 'M') + lx(MMP_DURATIONS[i]).toFixed(1) + ' ' + ly(v).toFixed(1);
+            pen = true;
+        });
+        return d;
+    };
+    const curVals = series[series.length - 1];
+    const cmpVals = st.cmp ? series[0] : null;
+    if (cmpVals) root.appendChild(svg('path', { d: pathOf(cmpVals), class: 'ra-curve-cmp' }));
+    root.appendChild(svg('path', { d: pathOf(curVals), class: 'ra-curve-cur' }));
+
+    const cross = svg('g', { class: 'ra-cross', visibility: 'hidden' }, [
+        svg('line', { y1: T, y2: T + plotH, class: 'ra-cross-line' }),
+        cmpVals ? svg('circle', { r: 3.5, class: 'ra-cross-dot cmp' }) : null,
+        svg('circle', { r: 4, class: 'ra-cross-dot cur' })
+    ]);
+    root.appendChild(cross);
+    const overlay = svg('rect', { x: L, y: T, width: plotW, height: plotH, class: 'ra-overlay clickable' });
+    root.appendChild(overlay);
+    box.appendChild(root);
+
+    st.chart = { lx, ly, cross, curVals, cmpVals, last, lnMax, L, plotW };
+
+    const indexAtPx = (clientX) => {
+        const rect = root.getBoundingClientRect();
+        const px = Math.min(L + plotW, Math.max(L, clientX - rect.left));
+        const lnD = ((px - L) / plotW) * lnMax;
+        let best = 0;
+        for (let i = 1; i <= last; i++) {
+            if (Math.abs(Math.log(MMP_DURATIONS[i]) - lnD) < Math.abs(Math.log(MMP_DURATIONS[best]) - lnD)) best = i;
+        }
+        return best;
+    };
+    overlay.addEventListener('pointermove', (e) => setCurveHover(indexAtPx(e.clientX)));
+    overlay.addEventListener('pointerleave', () => setCurveHover(null));
+    overlay.addEventListener('click', (e) => openFromCurve(indexAtPx(e.clientX)));
+    renderCurveReadout(null);
+}
+
+function setCurveHover(i) {
+    const st = rideState.curve;
+    if (!st || !st.chart) return;
+    const ch = st.chart;
+    if (i === null) {
+        ch.cross.setAttribute('visibility', 'hidden');
+        renderCurveReadout(null);
+        return;
+    }
+    const x = ch.lx(MMP_DURATIONS[i]);
+    ch.cross.setAttribute('visibility', 'visible');
+    const line = ch.cross.querySelector('line');
+    line.setAttribute('x1', x);
+    line.setAttribute('x2', x);
+    const place = (sel, v) => {
+        const dot = ch.cross.querySelector(sel);
+        if (!dot) return;
+        dot.setAttribute('visibility', Number.isNaN(v) ? 'hidden' : 'visible');
+        if (!Number.isNaN(v)) { dot.setAttribute('cx', x); dot.setAttribute('cy', ch.ly(v)); }
+    };
+    place('.cur', ch.curVals[i]);
+    if (ch.cmpVals) place('.cmp', ch.cmpVals[i]);
+    renderCurveReadout(i);
+}
+
+function fmtCurveValue(v, wkg) {
+    if (Number.isNaN(v)) return '–';
+    return wkg ? v.toFixed(2) + ' W/kg' : Math.round(v) + ' W';
+}
+
+function renderCurveReadout(i) {
+    const st = rideState.curve;
+    const box = $('raCurveReadout');
+    if (i === null || !st) {
+        box.replaceChildren(el('span', { class: 'ra-muted', text: 'Hover the curve for values · click it to open the ride where a point was set' }));
+        return;
+    }
+    const r = st.cur.ride[i];
+    const parts = [
+        el('span', { class: 'ra-readout-x', text: fmtSpan(MMP_DURATIONS[i]) }),
+        el('span', { class: 'ra-readout-item' }, [el('i', { class: 'ra-swatch cur' }), el('strong', { text: fmtCurveValue(curveValue(st.cur, i, st.wkg), st.wkg) }),
+            r ? ' · ' + r.name + ', ' + fmtDate(r) : ''])
+    ];
+    if (st.cmp) {
+        parts.push(el('span', { class: 'ra-readout-item' }, [el('i', { class: 'ra-swatch cmp' }),
+            el('strong', { text: fmtCurveValue(curveValue(st.cmp, i, st.wkg), st.wkg) })]));
+    }
+    box.replaceChildren(...parts);
+}
+
+/* Opens the ride a curve point came from, with that effort shaded. */
+async function openFromCurve(i) {
+    const st = rideState.curve;
+    const r = st && st.cur.ride[i];
+    if (!r) return;
+    const h = { sec: MMP_DURATIONS[i], start: st.cur.start[i] };
+    if (await openRide(r.id)) setHighlight(h);
+}
+
+function renderCurveTable() {
+    const st = rideState.curve;
+    const tbody = $('raCurveTable').tBodies[0];
+    $('raCurveTable').tHead.rows[0].cells[4].textContent = st.cmp ? (st.cmpLabel.startsWith('All-time') ? 'All-time' : 'Previous') : 'Compare';
+    tbody.replaceChildren(...CURVE_KEY_S.map((d) => {
+        const i = MMP_DURATIONS.indexOf(d);
+        const w = st.cur.w[i];
+        const r = st.cur.ride[i];
+        const kg = r ? weightFor(r) : null;
+        const c = st.cmp ? st.cmp.w[i] : NaN;
+        const delta = !Number.isNaN(w) && !Number.isNaN(c) ? w - c : NaN;
+        return el('tr', { 'data-sec': String(d) }, [
+            el('td', { text: fmtSpan(d) }),
+            el('td', { class: 'num', text: Number.isNaN(w) ? '–' : Math.round(w) + ' W' }),
+            el('td', { class: 'num', text: !Number.isNaN(w) && isNum(kg) ? (w / kg).toFixed(2) : '–' }),
+            el('td', null, r ? el('button', { type: 'button', class: 'ra-link', onclick: () => openFromCurve(i) },
+                r.name + ' · ' + fmtDate(r)) : el('span', { class: 'ra-muted', text: '–' })),
+            el('td', { class: 'num', text: Number.isNaN(c) ? '–' : Math.round(c) + ' W' }),
+            el('td', { class: 'num ' + (delta < 0 ? 'ra-down' : delta > 0 ? 'ra-up' : ''),
+                       text: Number.isNaN(delta) ? '–' : (delta > 0 ? '+' : '') + Math.round(delta) + ' W' })
+        ]);
+    }));
+}
+
+function renderExcludedList() {
+    const box = $('raExcluded');
+    const rides = rideState.rides.filter((r) => isExcluded(r.id)).sort((a, b) => b.startUnix - a.startUnix);
+    box.hidden = !rides.length;
+    if (!rides.length) return;
+    box.replaceChildren(
+        el('h3', { text: 'Excluded from power analysis' }),
+        el('p', { class: 'ra-muted small', text: 'Rides with bad power data can be left out of curves and FTP estimates from the ride page.' }),
+        el('ul', { class: 'ra-excluded-list' }, rides.map((r) => el('li', null, [
+            el('button', { type: 'button', class: 'ra-link', onclick: () => openRide(r.id) }, r.name + ' · ' + fmtDate(r)),
+            ' ',
+            el('button', { type: 'button', class: 'ra-btn ghost small', 'data-include': r.id,
+                           onclick: () => { setExcluded(r.id, false); renderPower(); } }, 'Include again')
+        ])))
+    );
+}
+
+function renderExcludeButton() {
+    const btn = $('raExcludeBtn');
+    const r = rideState.act && rideState.act.ride;
+    btn.hidden = !r || !r.channels.includes('power');
+    if (!r) return;
+    const on = isExcluded(r.id);
+    btn.setAttribute('aria-pressed', on ? 'true' : 'false');
+    btn.textContent = on ? 'Excluded from power analysis — include' : 'Exclude from power analysis';
 }
 
 function renderAll() {
@@ -1909,6 +2352,7 @@ function bindUi() {
     for (const tab of document.querySelectorAll('.ra-tab')) {
         tab.addEventListener('click', () => {
             if (tab.disabled) return;
+            if (tab.dataset.view === 'power') { showPower(); return; }
             setRoute(tab.dataset.view === 'activity' && rideState.current ? 'ride=' + rideState.current : '');
             showView(tab.dataset.view);
         });
@@ -1918,6 +2362,16 @@ function bindUi() {
 
     $('raXAxis').addEventListener('change', renderChart);
     $('raSmooth').addEventListener('change', renderChart);
+
+    for (const id of ['raCurvePeriod', 'raCurveCompare', 'raCurveUnits', 'raCurveFrom', 'raCurveTo']) {
+        $(id).addEventListener('change', renderPower);
+    }
+    $('raExcludeBtn').addEventListener('click', () => {
+        const r = rideState.act && rideState.act.ride;
+        if (!r) return;
+        setExcluded(r.id, !isExcluded(r.id));
+        renderExcludeButton();
+    });
     /* Charts are drawn at their real pixel width, so redraw when it changes. */
     if (window.ResizeObserver) {
         let lastW = 0;
@@ -1933,6 +2387,13 @@ function bindUi() {
                 renderMap();
             });
         }).observe($('raViewActivity'));
+        let lastCurveW = 0;
+        new ResizeObserver(() => {
+            const w = $('raCurveChart').clientWidth;
+            if (!rideState.curve || w === lastCurveW || !w) return;
+            lastCurveW = w;
+            requestAnimationFrame(renderCurveChart);
+        }).observe($('raViewPower'));
     }
 
     $('raZipInput').addEventListener('change', (e) => { importFiles(e.target.files); e.target.value = ''; });

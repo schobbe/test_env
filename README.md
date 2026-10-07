@@ -33,8 +33,13 @@ Power, heart-rate and FTP analysis of your cycling, read from Strava's
   leaves the browser), best efforts 5 s – 60 min, Coggan power and Friel HR
   zones, intensity factor, TSS and Pw:HR drift. Power spikes are cleaned for
   every figure while the stored stream stays raw.
-* Next: power curves, FTP models and timeline, period and fitness views. See
-  the wiki, section 9.
+* Power curve: best average power for 87 durations from 1 s to 6 h per ride,
+  combined over any period (estimation windows, this/last year, all time,
+  custom) against the all-time best or the previous period, in W or W/kg.
+  Every point links to the ride it was set in; rides with bad power data can
+  be excluded.
+* Next: FTP models and timeline, period and fitness views. See the wiki,
+  section 9.
 * Tests: `tests\Run-StravaTests.ps1` (synthetic FIT fixtures, no real data).
 
 ### BF6 Player Stats (`bf6.html`)

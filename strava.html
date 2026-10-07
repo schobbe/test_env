@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Ride Analytics</title>
-    <link rel="stylesheet" href="strava.css?v=2">
+    <link rel="stylesheet" href="strava.css?v=3">
 </head>
 <body class="ra-page">
     <!-- Top bar -->
@@ -34,7 +34,7 @@
             <button type="button" role="tab" class="ra-tab" id="raTabActivities" data-view="activities" aria-selected="true">Activities</button>
             <button type="button" role="tab" class="ra-tab" id="raTabActivity" data-view="activity" aria-selected="false" disabled>Activity</button>
             <button type="button" role="tab" class="ra-tab" data-view="period" aria-selected="false" disabled>Period <span class="ra-soon">planned</span></button>
-            <button type="button" role="tab" class="ra-tab" data-view="power" aria-selected="false" disabled>Power &amp; FTP <span class="ra-soon">planned</span></button>
+            <button type="button" role="tab" class="ra-tab" id="raTabPower" data-view="power" aria-selected="false">Power &amp; FTP</button>
             <button type="button" role="tab" class="ra-tab" data-view="fitness" aria-selected="false" disabled>Fitness <span class="ra-soon">planned</span></button>
         </div>
 
@@ -210,7 +210,10 @@
                         <h2 id="raActName">—</h2>
                         <span class="ra-muted" id="raActMeta"></span>
                     </div>
-                    <button type="button" class="ra-btn ghost small" id="raBackBtn">← All rides</button>
+                    <div class="ra-head-actions">
+                        <button type="button" class="ra-btn ghost small" id="raExcludeBtn" aria-pressed="false" hidden>Exclude from power analysis</button>
+                        <button type="button" class="ra-btn ghost small" id="raBackBtn">← All rides</button>
+                    </div>
                 </div>
                 <div class="ra-tiles" id="raActTiles"></div>
                 <p class="ra-muted small" id="raActStreams"></p>
@@ -280,8 +283,61 @@
                 </div>
             </div>
         </section>
+
+        <!-- ============================ POWER & FTP =========================== -->
+        <section class="ra-view" id="raViewPower" role="tabpanel" aria-labelledby="raTabPower" hidden>
+            <div class="ra-panel">
+                <div class="ra-panel-head">
+                    <div>
+                        <h2>Power curve</h2>
+                        <span class="ra-muted small" id="raCurveSummary"></span>
+                    </div>
+                    <div class="ra-form-row">
+                        <label class="ra-field">Period
+                            <select id="raCurvePeriod"></select>
+                        </label>
+                        <label class="ra-field">Compare with
+                            <select id="raCurveCompare">
+                                <option value="best">All-time best</option>
+                                <option value="previous">Previous period</option>
+                                <option value="none">Nothing</option>
+                            </select>
+                        </label>
+                        <label class="ra-field">Units
+                            <select id="raCurveUnits">
+                                <option value="w">Watts</option>
+                                <option value="wkg">W/kg</option>
+                            </select>
+                        </label>
+                    </div>
+                </div>
+                <div class="ra-form-row ra-curve-custom" id="raCurveCustom" hidden>
+                    <label class="ra-field">From <input type="date" id="raCurveFrom"></label>
+                    <label class="ra-field">To <input type="date" id="raCurveTo"></label>
+                </div>
+                <p class="ra-muted small" id="raCurveStatus" role="status"></p>
+                <div class="ra-legend" id="raCurveLegend"></div>
+                <div class="ra-readout" id="raCurveReadout"></div>
+                <div class="ra-chart" id="raCurveChart"></div>
+                <p class="ra-muted small">Best average power for every duration from 1 s to 6 h, on cleaned power, with pauses counting as zero so no effort spans a stop. Each point is the best single effort across all rides in the period.</p>
+            </div>
+
+            <div class="ra-panel">
+                <div class="ra-panel-head">
+                    <h2>Key durations</h2>
+                </div>
+                <div class="ra-table-wrap">
+                    <table class="ra-table compact" id="raCurveTable">
+                        <thead><tr><th>Duration</th><th class="num">Best</th><th class="num">W/kg</th><th>Set in</th><th class="num">Compare</th><th class="num">Δ</th></tr></thead>
+                        <tbody></tbody>
+                    </table>
+                </div>
+                <div class="ra-subpanel ra-excluded" id="raExcluded" hidden></div>
+                <p class="ra-note">FTP models built on this curve — 20-min, 8-min, critical power and more, over your estimation windows — arrive with the next step.</p>
+            </div>
+        </section>
     </div>
 
-    <script src="strava.js?v=2"></script>
+    <script src="strava.js?v=3"></script>
 </body>
 </html>
